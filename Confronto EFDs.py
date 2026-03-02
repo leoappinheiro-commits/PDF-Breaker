@@ -180,6 +180,143 @@ TIPO_ITEM_DESCRICAO = {
 }
 
 
+MONOFASICO_NCM = {
+    "27101259", "27101921", "27101932", "27101999", "27111910", "27112910", "22030000"
+}
+
+ST_NCM = {
+    "22011000", "22021000", "24022000", "30049099", "33030010", "34011190"
+}
+
+SERVICOS_SEM_CREDITO = {
+    "servico administrativo", "serviço administrativo", "contabilidade", "advocaticio", "advocatício",
+    "consultoria", "rh", "recursos humanos", "limpeza", "vigilancia", "vigilância", "marketing",
+}
+
+CNAE_AGRO_PREFIXOS = ("01", "02", "03")
+TIPO_ITEM_INDUSTRIAL = {"01", "02", "03", "04", "06", "10"}
+
+
+def _normalizar_texto(valor: str) -> str:
+    return re.sub(r"\s+", " ", str(valor or "").strip().lower())
+
+
+def _normalizar_ncm(ncm: str) -> str:
+    return re.sub(r"\D", "", str(ncm or ""))[:8]
+
+
+def _parse_valor_brasileiro(serie: pd.Series) -> pd.Series:
+    return pd.to_numeric(
+        serie.astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False),
+        errors="coerce",
+    ).fillna(0.0)
+
+
+def carregar_cnae(main_dir: Path) -> Tuple[str, str]:
+    """Carrega CNAE principal a partir do arquivo CNAE.xlsx em MAIN_DIR."""
+    caminho_cnae = main_dir / "CNAE.xlsx"
+    if not caminho_cnae.exists():
+        raise ProcessamentoErro(f"Arquivo CNAE não encontrado: {caminho_cnae}")
+
+    try:
+        df_cnae = pd.read_excel(caminho_cnae, sheet_name="Sheet1")
+    except Exception as exc:
+        raise ProcessamentoErro(f"Erro ao ler arquivo CNAE {caminho_cnae}: {exc}") from exc
+
+    colunas_esperadas = {"CNAE", "Descrição"}
+    if not colunas_esperadas.issubset(df_cnae.columns):
+        raise ProcessamentoErro("Arquivo CNAE inválido. Colunas esperadas: 'CNAE' e 'Descrição'.")
+
+    df_cnae = df_cnae.dropna(subset=["CNAE"]).copy()
+    if df_cnae.empty:
+        raise ProcessamentoErro("Arquivo CNAE sem registros válidos na coluna 'CNAE'.")
+
+    cnae = re.sub(r"\D", "", str(df_cnae.iloc[0]["CNAE"]))
+    descricao = str(df_cnae.iloc[0]["Descrição"] or "").strip()
+    if not cnae:
+        raise ProcessamentoErro("CNAE principal inválido no arquivo CNAE.xlsx.")
+
+    return cnae, descricao
+
+
+def avaliar_credito_objetivo(ncm: str, descricao: str, cnae: str) -> Tuple[str, str, str]:
+    """Avalia regras objetivas de crédito conforme legislação e CNAE."""
+    ncm_norm = _normalizar_ncm(ncm)
+    descricao_norm = _normalizar_texto(descricao)
+    cnae_norm = re.sub(r"\D", "", str(cnae or ""))
+
+    if ncm_norm in MONOFASICO_NCM:
+        return "Crédito vedado", "Lei 10.925/2004 - item monofásico", "Baixo"
+
+    if ncm_norm in ST_NCM:
+        return "Crédito vedado", "IN RFB 2.121/2022 - item sujeito à ST", "Baixo"
+
+    if any(serv in descricao_norm for serv in SERVICOS_SEM_CREDITO):
+        return "Crédito improvável", "Leis 10.637/2002 e 10.833/2003 - serviço administrativo", "Médio"
+
+    if any(cnae_norm.startswith(prefixo) for prefixo in CNAE_AGRO_PREFIXOS):
+        return "Crédito possível", "Lei 10.925/2004 - atividade agro com análise específica", "Médio"
+
+    return "Necessita análise interpretativa", "Tema 779/STJ (conceito de insumo)", "Médio"
+
+
+def calcular_score_credito(row: pd.Series) -> int:
+    """Calcula score automático para triagem preliminar de crédito."""
+    score = 0
+    ncm = _normalizar_ncm(row.get("ncm", ""))
+    descricao = _normalizar_texto(row.get("descr_item", ""))
+    cnae = re.sub(r"\D", "", str(row.get("CNAE", "")))
+    tipo_item = str(row.get("tipo_item", "")).strip()
+    cfop = str(row.get("cfop", "")).strip()
+
+    if ncm in MONOFASICO_NCM:
+        score -= 100
+    if ncm in ST_NCM:
+        score -= 100
+    if any(serv in descricao for serv in SERVICOS_SEM_CREDITO):
+        score -= 40
+    if any(cnae.startswith(prefixo) for prefixo in CNAE_AGRO_PREFIXOS):
+        score += 30
+    if tipo_item in TIPO_ITEM_INDUSTRIAL:
+        score += 20
+    if any(chave in descricao for chave in ("energia eletrica", "energia elétrica", "c500")):
+        score += 40
+    if cfop.startswith(("13", "23", "53", "63", "73")) or "frete" in descricao:
+        score += 30
+
+    return score
+
+
+def classificar_score(score: int) -> str:
+    if score >= 40:
+        return "Crédito provável"
+    if 10 <= score <= 39:
+        return "Crédito possível com risco"
+    if -10 <= score <= 9:
+        return "Necessita análise"
+    return "Crédito improvável/vedado"
+
+
+def gerar_resumo_oportunidades(df_analitico: pd.DataFrame) -> pd.DataFrame:
+    """Gera resumo de oportunidades por classificação final."""
+    colunas_saida = ["Classificacao_Final", "Soma_Potencial_Credito", "Quantidade_Itens", "%_Sobre_Total_Potencial"]
+    if df_analitico.empty:
+        return pd.DataFrame(columns=colunas_saida)
+
+    total_potencial = df_analitico["Potencial_Credito"].sum()
+    resumo = (
+        df_analitico.groupby("Classificacao_Final", dropna=False, as_index=False)
+        .agg(
+            Soma_Potencial_Credito=("Potencial_Credito", "sum"),
+            Quantidade_Itens=("Classificacao_Final", "size"),
+        )
+    )
+    resumo["%_Sobre_Total_Potencial"] = (
+        resumo["Soma_Potencial_Credito"] / total_potencial * 100 if total_potencial > 0 else 0.0
+    )
+    return resumo.sort_values(by="Soma_Potencial_Credito", ascending=False).reset_index(drop=True)
+
+
 class ProcessamentoErro(Exception):
     """Erro de processamento do confronto C170."""
 
@@ -844,10 +981,7 @@ def gerar_resumo_sintetico(df_divergente: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["descr_item", "valor_item_total", "percentual_total"])
 
     resumo = df_divergente.copy()
-    resumo["vl_item_num"] = (
-        resumo["vl_item"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-    )
-    resumo["vl_item_num"] = pd.to_numeric(resumo["vl_item_num"], errors="coerce").fillna(0.0)
+    resumo["vl_item_num"] = _parse_valor_brasileiro(resumo["vl_item"])
 
     agrupado = (
         resumo.groupby("descr_item", dropna=False, as_index=False)["vl_item_num"]
@@ -870,10 +1004,7 @@ def gerar_resumo_por_fornecedor(df_divergente: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["nome_part", "cnpj", "valor_item_total", "percentual_total"])
 
     resumo = df_divergente.copy()
-    resumo["vl_item_num"] = (
-        resumo["vl_item"].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-    )
-    resumo["vl_item_num"] = pd.to_numeric(resumo["vl_item_num"], errors="coerce").fillna(0.0)
+    resumo["vl_item_num"] = _parse_valor_brasileiro(resumo["vl_item"])
 
     agrupado = (
         resumo.groupby(["nome_part", "cnpj"], dropna=False, as_index=False)["vl_item_num"]
@@ -888,6 +1019,7 @@ def gerar_resumo_por_fornecedor(df_divergente: pd.DataFrame) -> pd.DataFrame:
 def gerar_saida(
     df_divergente: pd.DataFrame,
     df_resumo: pd.DataFrame,
+    df_resumo_oportunidades: pd.DataFrame,
     df_d100_divergente: pd.DataFrame,
     df_resumo_fretes: pd.DataFrame,
     df_c500_divergente: pd.DataFrame,
@@ -899,6 +1031,7 @@ def gerar_saida(
         with pd.ExcelWriter(caminho_saida) as writer:
             df_divergente.to_excel(writer, sheet_name="Analitico", index=False)
             df_resumo.to_excel(writer, sheet_name="Resumo Sintetico", index=False)
+            df_resumo_oportunidades.to_excel(writer, sheet_name="Resumo_Oportunidades", index=False)
             df_d100_divergente.to_excel(writer, sheet_name="Analitico - Fretes", index=False)
             df_resumo_fretes.to_excel(writer, sheet_name="Resumo - Fretes", index=False)
             df_c500_divergente.to_excel(writer, sheet_name="Analitico - C500", index=False)
@@ -907,7 +1040,7 @@ def gerar_saida(
         raise ProcessamentoErro(f"Erro ao gerar arquivo de saída {caminho_saida}: {exc}") from exc
 
 
-def executar(main_dir: Path) -> Tuple[int, int, int, int, int, Path]:
+def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, Path]:
     """Orquestra execução completa."""
     pasta_resultado = main_dir / "Resultado"
     pasta_contrib = pasta_resultado / "EFD Contribuições"
@@ -925,7 +1058,37 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, Path]:
 
     caminho_cfop = pasta_resultado / "TAX Engine _ CFOP.xlsx"
     df_divergente_filtrado = aplicar_filtro_cfop(df_divergente, caminho_cfop)
+
+    cnae_principal, _ = carregar_cnae(main_dir)
+    df_divergente_filtrado = df_divergente_filtrado.copy()
+    df_divergente_filtrado["CNAE"] = cnae_principal
+
+    if df_divergente_filtrado.empty:
+        df_divergente_filtrado["Classificacao_Objetiva"] = pd.Series(dtype="object")
+        df_divergente_filtrado["Fundamento_Objetivo"] = pd.Series(dtype="object")
+        df_divergente_filtrado["Risco_Objetivo"] = pd.Series(dtype="object")
+        df_divergente_filtrado["Score_Credito"] = pd.Series(dtype="int64")
+        df_divergente_filtrado["Classificacao_Final"] = pd.Series(dtype="object")
+    else:
+        avaliacao_objetiva = df_divergente_filtrado.apply(
+            lambda row: avaliar_credito_objetivo(row.get("ncm", ""), row.get("descr_item", ""), cnae_principal),
+            axis=1,
+            result_type="expand",
+        )
+        avaliacao_objetiva.columns = ["Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo"]
+        df_divergente_filtrado[["Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo"]] = avaliacao_objetiva
+
+        df_divergente_filtrado["Score_Credito"] = df_divergente_filtrado.apply(calcular_score_credito, axis=1)
+        df_divergente_filtrado["Classificacao_Final"] = df_divergente_filtrado["Score_Credito"].apply(classificar_score)
+
+    df_divergente_filtrado["vl_item_num"] = _parse_valor_brasileiro(df_divergente_filtrado["vl_item"])
+    df_divergente_filtrado["Potencial_Credito"] = df_divergente_filtrado["vl_item_num"] * 0.0925
+    df_divergente_filtrado = df_divergente_filtrado.sort_values(
+        by=["Score_Credito", "Potencial_Credito"], ascending=[False, False]
+    ).reset_index(drop=True)
+
     df_resumo = gerar_resumo_sintetico(df_divergente_filtrado)
+    df_resumo_oportunidades = gerar_resumo_oportunidades(df_divergente_filtrado)
 
     df_d100_fiscal = extrair_d100(arquivos_fiscal)
     df_d100_contrib = extrair_d100(arquivos_contrib)
@@ -941,6 +1104,7 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, Path]:
     gerar_saida(
         df_divergente_filtrado,
         df_resumo,
+        df_resumo_oportunidades,
         df_d100_divergente,
         df_resumo_fretes,
         df_c500_divergente,
@@ -948,12 +1112,19 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, Path]:
         arquivo_saida,
     )
 
+    total_vedado_automatico = int((df_divergente_filtrado["Classificacao_Objetiva"] == "Crédito vedado").sum())
+    total_credito_provavel = int((df_divergente_filtrado["Classificacao_Final"] == "Crédito provável").sum())
+    potencial_total = float(df_divergente_filtrado["Potencial_Credito"].sum())
+
     return (
         len(df_fiscal),
         len(df_divergente_c170),
         len(df_divergente_filtrado),
         len(df_d100_divergente),
         len(df_c500_divergente),
+        total_vedado_automatico,
+        total_credito_provavel,
+        potencial_total,
         arquivo_saida,
     )
 
@@ -986,6 +1157,9 @@ def main() -> int:
             total_pos_a170,
             total_d100_divergente,
             total_c500_divergente,
+            total_vedado_automatico,
+            total_credito_provavel,
+            potencial_total,
             saida,
         ) = executar(main_dir)
     except ProcessamentoErro as exc:
@@ -1001,6 +1175,10 @@ def main() -> int:
     print(f"Total após confronto com A170: {total_pos_a170}")
     print(f"Total D100 divergente: {total_d100_divergente}")
     print(f"Total C500 divergente: {total_c500_divergente}")
+    print(f"Total itens analisados: {total_pos_a170}")
+    print(f"Total vedados automaticamente: {total_vedado_automatico}")
+    print(f"Total crédito provável: {total_credito_provavel}")
+    print(f"Potencial financeiro total estimado: {potencial_total:.2f}")
     print(f"Arquivo gerado: {saida}")
     return 0
 
