@@ -64,101 +64,101 @@ INDICE_0000_DT_INI = 4
 LAYOUTS = {
     "FISCAL": {
         2014: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2015: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2016: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2017: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2018: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2019: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2020: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2021: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2022: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2023: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2024: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2025: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
     },
     "CONTRIBUICOES": {
         2014: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2015: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2016: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2017: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2018: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2019: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2020: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2021: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2022: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2023: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2024: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
         2025: {
-            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 15, "CFOP": 14},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
     },
@@ -299,6 +299,52 @@ def carregar_arquivos(pasta_base: Path) -> List[Path]:
 def _obter_campo(partes: List[str], indice: int) -> str:
     """Retorna campo por índice com segurança."""
     return partes[indice].strip() if len(partes) > indice else ""
+
+
+def _parece_data(valor: str) -> bool:
+    valor = (valor or "").strip()
+    return len(valor) == 8 and valor.isdigit()
+
+
+def _parece_valor(valor: str) -> bool:
+    valor = (valor or "").strip()
+    if not valor:
+        return False
+    return bool(re.fullmatch(r"\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:,\d+)?", valor))
+
+
+def _parece_cfop(valor: str) -> bool:
+    valor = (valor or "").strip()
+    return len(valor) == 4 and valor.isdigit()
+
+
+def _ajustar_campos_d100(registro: Dict[str, str], partes: List[str], idx_data: int) -> Dict[str, str] | None:
+    """Aplica heurísticas para corrigir deslocamentos comuns de layout no D100."""
+    vl_item = (registro.get("vl_item") or "").strip()
+    cfop = (registro.get("cfop") or "").strip()
+
+    # Alguns layouts trocam posições de VL_DOC/CFOP.
+    if (not _parece_valor(vl_item) or _parece_cfop(vl_item)) and _parece_valor(cfop):
+        registro["vl_item"], registro["cfop"] = cfop, vl_item
+        vl_item, cfop = registro["vl_item"], registro["cfop"]
+
+    # Busca data válida no entorno caso o índice do layout venha deslocado.
+    if not _parece_data(registro.get("data", "")):
+        for desloc in range(-2, 4):
+            candidato = _obter_campo(partes, idx_data + desloc)
+            if _parece_data(candidato):
+                registro["data"] = candidato
+                break
+
+    # CFOP é opcional em alguns layouts de Contribuições.
+    if not _parece_cfop(cfop):
+        registro["cfop"] = ""
+
+    # Descarta linhas claramente inválidas para confronto documental.
+    if not registro.get("num_nota", "").strip() or not _parece_data(registro.get("data", "")):
+        return None
+
+    return registro
 
 
 def extrair_0150(partes: List[str]) -> Dict[str, str]:
@@ -576,19 +622,20 @@ def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
                     elif registro == "D100":
                         cod_part = _obter_campo(partes, layout_d100["COD_PART"])
                         participante = mapa_participantes.get(cod_part, {})
-                        registros.append(
-                            {
-                                "arquivo": arquivo.name,
-                                "cod_part": cod_part,
-                                "nome_part": participante.get("nome_part", ""),
-                                "cnpj": participante.get("cnpj", ""),
-                                "num_nota": _obter_campo(partes, layout_d100["NUM_DOC"]),
-                                "serie": _obter_campo(partes, layout_d100["SERIE"]),
-                                "data": _obter_campo(partes, layout_d100["DT_DOC"]),
-                                "vl_item": _obter_campo(partes, layout_d100["VL_DOC"]),
-                                "cfop": _obter_campo(partes, layout_d100["CFOP"]),
-                            }
-                        )
+                        registro_d100 = {
+                            "arquivo": arquivo.name,
+                            "cod_part": cod_part,
+                            "nome_part": participante.get("nome_part", ""),
+                            "cnpj": participante.get("cnpj", ""),
+                            "num_nota": _obter_campo(partes, layout_d100["NUM_DOC"]),
+                            "serie": _obter_campo(partes, layout_d100["SERIE"]),
+                            "data": _obter_campo(partes, layout_d100["DT_DOC"]),
+                            "vl_item": _obter_campo(partes, layout_d100["VL_DOC"]),
+                            "cfop": _obter_campo(partes, layout_d100.get("CFOP", -1)),
+                        }
+                        registro_d100 = _ajustar_campos_d100(registro_d100, partes, layout_d100["DT_DOC"])
+                        if registro_d100 is not None:
+                            registros.append(registro_d100)
         except OSError as exc:
             raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo}: {exc}") from exc
 
