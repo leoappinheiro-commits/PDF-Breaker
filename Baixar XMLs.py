@@ -2,15 +2,37 @@ import os
 import shutil
 import datetime
 import time
+from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 import pandas as pd
-from webdriver_manager.chrome import ChromeDriverManager
 
-driver_version = "119.0.6045.106"  # Substitua pelo número da versão desejada
+# Deixe como None para baixar automaticamente uma versão compatível.
+# Só preencha se você realmente precisar fixar manualmente uma versão específica.
+driver_version = None
+
+
+def obter_caminho_chromedriver(versao=None):
+    """Garante que o caminho retornado pelo webdriver-manager seja o executável do chromedriver."""
+    caminho = ChromeDriverManager(driver_version=versao).install() if versao else ChromeDriverManager().install()
+    caminho_path = Path(caminho)
+
+    if caminho_path.is_file() and caminho_path.suffix.lower() == ".exe":
+        return str(caminho_path)
+
+    # Alguns ambientes retornam o diretório de cache ou um arquivo que não é executável.
+    pasta = caminho_path if caminho_path.is_dir() else caminho_path.parent
+    candidatos = list(pasta.rglob("chromedriver.exe"))
+    if candidatos:
+        return str(candidatos[0])
+
+    raise RuntimeError(
+        f"Não foi possível localizar o executável 'chromedriver.exe' em: {pasta}. "
+        "Defina o caminho manualmente para evitar o erro WinError 193."
+    )
 
 
 i = 0
@@ -22,11 +44,15 @@ chrome_options.add_argument('--disable-popup-blocking')
 chrome_options.add_argument('--safebrowsing-disable-download-protection')
 chrome_options.add_argument('--no-sandbox')
 
-# Configurar o serviço do WebDriver
-driver_path = ChromeDriverManager().install()
 # Inicializar o driver do Chrome
-service = Service(ChromeDriverManager().install())
-navegador = webdriver.Chrome(service=service, options=chrome_options)
+# 1) Tenta Selenium Manager (resolve automaticamente o driver correto para o Chrome instalado)
+# 2) Em caso de falha, usa webdriver-manager com validação de caminho
+try:
+    navegador = webdriver.Chrome(options=chrome_options)
+except Exception:
+    driver_path = obter_caminho_chromedriver(driver_version)
+    service = Service(executable_path=driver_path)
+    navegador = webdriver.Chrome(service=service, options=chrome_options)
 
 # Acessar a página desejada
 navegador.get("https://consultadanfe.com/#")
