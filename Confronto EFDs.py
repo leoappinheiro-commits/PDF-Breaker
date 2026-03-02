@@ -201,18 +201,29 @@ def detectar_layout_sped(arquivo_txt: Path) -> Tuple[str, int]:
         partes = [p.strip() for p in linha.split("|")]
         if "0000" in partes:
             indice_0000 = partes.index("0000")
-            dt_ini_idx = indice_0000 + 3
-            if dt_ini_idx < len(partes):
-                dt_ini = partes[dt_ini_idx]
-                if len(dt_ini) >= 8 and dt_ini[-4:].isdigit():
-                    return int(dt_ini[-4:])
 
-        match = re.search(r"\|\s*0000\s*\|[^|]*\|[^|]*\|(\d{8})\|", linha)
+            # Layouts variam (EFD Fiscal x Contribuições e versões), então
+            # buscamos a primeira data DDMMYYYY após o registro 0000.
+            for campo in partes[indice_0000 + 1 :]:
+                if len(campo) == 8 and campo.isdigit():
+                    return int(campo[-4:])
+
+            # Fallback conservador para layouts esperados no histórico.
+            for deslocamento in (3, 4, 5):
+                dt_ini_idx = indice_0000 + deslocamento
+                if dt_ini_idx < len(partes):
+                    dt_ini = partes[dt_ini_idx]
+                    if len(dt_ini) == 8 and dt_ini.isdigit():
+                        return int(dt_ini[-4:])
+
+        # Fallback regex: captura a primeira data DDMMYYYY após |0000|.
+        match = re.search(r"\|\s*0000\s*\|(?:[^|]*\|)*?(\d{8})\|", linha)
         if match:
             dt_ini = match.group(1)
             return int(dt_ini[-4:])
 
         return None
+
 
     for encoding in ("utf-8-sig", "latin-1"):
         try:
