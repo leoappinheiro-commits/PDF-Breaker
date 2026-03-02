@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -188,42 +189,52 @@ def detectar_layout_sped(arquivo_txt: Path) -> Tuple[str, int]:
     tipo_sped = "CONTRIBUICOES" if "contrib" in str(arquivo_txt).lower() else "FISCAL"
     primeiras_linhas: List[str] = []
 
-    def _tentar_extrair_ano(partes: List[str]) -> int | None:
-        dt_ini = _obter_campo(partes, INDICE_0000_DT_INI)
-        if not dt_ini or len(dt_ini) < 4:
+    def _normalizar_linha(linha: str) -> str:
+        linha = linha.replace("\ufeff", "").replace("\x00", "")
+        return linha.lstrip()
+
+    def _extrair_ano_da_linha(linha: str) -> int | None:
+        linha = _normalizar_linha(linha).rstrip("\n\r")
+        if not linha:
             return None
-        sufixo = dt_ini[-4:]
-        return int(sufixo) if sufixo.isdigit() else None
+
+        partes = [p.strip() for p in linha.split("|")]
+        if "0000" in partes:
+            indice_0000 = partes.index("0000")
+            dt_ini_idx = indice_0000 + 3
+            if dt_ini_idx < len(partes):
+                dt_ini = partes[dt_ini_idx]
+                if len(dt_ini) >= 8 and dt_ini[-4:].isdigit():
+                    return int(dt_ini[-4:])
+
+        match = re.search(r"\|\s*0000\s*\|[^|]*\|[^|]*\|(\d{8})\|", linha)
+        if match:
+            dt_ini = match.group(1)
+            return int(dt_ini[-4:])
+
+        return None
 
     for encoding in ("utf-8-sig", "latin-1"):
         try:
             with arquivo_txt.open("r", encoding=encoding, errors="ignore") as f:
-                for linha in f:
-                    linha_limpa = linha.lstrip().replace("\ufeff", "")
-                    if len(primeiras_linhas) < 10:
-                        primeiras_linhas.append(repr(linha_limpa.rstrip("\n\r")))
+                for linha_bruta in f:
+                    sublinhas = [linha_bruta]
+                    if "\n" in linha_bruta:
+                        sublinhas = [trecho for trecho in linha_bruta.split("\n") if trecho]
 
-                    if "0000" not in linha_limpa:
-                        continue
+                    for linha in sublinhas:
+                        linha_limpa = _normalizar_linha(linha)
+                        if len(primeiras_linhas) < 10:
+                            primeiras_linhas.append(repr(linha_limpa.rstrip("\n\r")))
 
-                    partes = linha_limpa.rstrip("\n\r").split("|")
-                    if "0000" not in partes:
-                        continue
+                        if "0000" not in linha_limpa:
+                            continue
 
-                    indice_0000 = partes.index("0000")
-                    ano_layout = _tentar_extrair_ano(partes)
+                        ano_layout = _extrair_ano_da_linha(linha_limpa)
+                        if ano_layout is None:
+                            continue
 
-                    if ano_layout is None and (indice_0000 + 3) < len(partes):
-                        dt_ini_alt = partes[indice_0000 + 3].strip()
-                        if len(dt_ini_alt) >= 4 and dt_ini_alt[-4:].isdigit():
-                            ano_layout = int(dt_ini_alt[-4:])
-
-                    if ano_layout is None:
-                        raise ProcessamentoErro(
-                            f"Registro 0000 sem DT_INI válido no arquivo: {arquivo_txt}"
-                        )
-
-                    return tipo_sped, ano_layout
+                        return tipo_sped, ano_layout
         except OSError as exc:
             raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo_txt}: {exc}") from exc
 
@@ -232,7 +243,6 @@ def detectar_layout_sped(arquivo_txt: Path) -> Tuple[str, int]:
         logging.debug("Linha %s: %s", idx, linha_debug)
 
     raise ProcessamentoErro(f"Registro 0000 não encontrado no arquivo: {arquivo_txt}")
-
 
 def obter_layout_registro(tipo_sped: str, ano_layout: int, registro: str) -> Dict[str, int]:
     """Retorna mapeamento de índices para um registro conforme tipo/ano."""
