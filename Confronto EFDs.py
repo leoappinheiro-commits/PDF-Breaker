@@ -54,20 +54,41 @@ INDICE_A100_DT_DOC = 10
 # A170 - itens de serviços
 INDICE_A170_COD_ITEM = 3
 
-# D100 - documentos de transporte
-INDICE_D100_COD_PART = 4
-INDICE_D100_SERIE = 7
-INDICE_D100_NUM_DOC = 9
-INDICE_D100_DT_DOC = 11
-INDICE_D100_VL_DOC = 13
-INDICE_D100_CFOP = 15
+# 0000 - abertura
+INDICE_0000_DT_INI = 4
 
-# C500 - energia/comunicação
-INDICE_C500_COD_PART = 2
-INDICE_C500_SERIE = 5
-INDICE_C500_NUM_DOC = 8
-INDICE_C500_DT_DOC = 9
-INDICE_C500_VL_DOC = 11
+# Camada dinâmica de layout para D100/C500 por tipo e ano do SPED.
+# Os índices abaixo consideram o split por "|" da linha do arquivo.
+LAYOUTS = {
+    "FISCAL": {
+        2014: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2018: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2023: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+    },
+    "CONTRIBUICOES": {
+        2014: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2018: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2023: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+    },
+}
 
 TIPO_ITEM_DESCRICAO = {
     "00": "Mercadoria para Revenda",
@@ -87,6 +108,52 @@ TIPO_ITEM_DESCRICAO = {
 
 class ProcessamentoErro(Exception):
     """Erro de processamento do confronto C170."""
+
+
+def detectar_layout_sped(arquivo_txt: Path) -> Tuple[str, int]:
+    """Detecta tipo de SPED e ano de layout com base no registro 0000."""
+    tipo_sped = "CONTRIBUICOES" if "contrib" in str(arquivo_txt).lower() else "FISCAL"
+
+    try:
+        with arquivo_txt.open("r", encoding="latin-1", errors="ignore") as f:
+            for linha in f:
+                if not linha.startswith("|"):
+                    continue
+                partes = linha.rstrip("\n\r").split("|")
+                if _obter_campo(partes, INDICE_REGISTRO) != "0000":
+                    continue
+
+                dt_ini = _obter_campo(partes, INDICE_0000_DT_INI)
+                if len(dt_ini) < 4:
+                    raise ProcessamentoErro(
+                        f"Registro 0000 sem DT_INI válido no arquivo: {arquivo_txt}"
+                    )
+
+                ano_layout = int(dt_ini[-4:])
+                return tipo_sped, ano_layout
+    except OSError as exc:
+        raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo_txt}: {exc}") from exc
+
+    raise ProcessamentoErro(f"Registro 0000 não encontrado no arquivo: {arquivo_txt}")
+
+
+def obter_layout_registro(tipo_sped: str, ano_layout: int, registro: str) -> Dict[str, int]:
+    """Retorna mapeamento de índices para um registro conforme tipo/ano."""
+    if tipo_sped not in LAYOUTS:
+        raise ProcessamentoErro(f"Tipo de SPED não mapeado: {tipo_sped}")
+
+    layouts_tipo = LAYOUTS[tipo_sped]
+    if ano_layout not in layouts_tipo:
+        raise ProcessamentoErro(
+            f"Layout do ano {ano_layout} ainda não configurado no dicionário LAYOUTS."
+        )
+
+    if registro not in layouts_tipo[ano_layout]:
+        raise ProcessamentoErro(
+            f"Registro {registro} não configurado para {tipo_sped}/{ano_layout} no LAYOUTS."
+        )
+
+    return layouts_tipo[ano_layout][registro]
 
 
 def carregar_arquivos(pasta_base: Path) -> List[Path]:
@@ -367,10 +434,13 @@ def confrontar_c170_a170(df_c170_remanescente: pd.DataFrame, df_a170: pd.DataFra
 
 
 def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
-    """Extrai D100 (fretes) com enriquecimento de participante via 0150."""
+    """Extrai D100 (fretes) com camada dinâmica de layout por tipo/ano."""
     registros: List[Dict[str, str]] = []
 
     for arquivo in arquivos_txt:
+        tipo_sped, ano_layout = detectar_layout_sped(arquivo)
+        layout_d100 = obter_layout_registro(tipo_sped, ano_layout, "D100")
+
         mapa_participantes: Dict[str, Dict[str, str]] = {}
         try:
             with arquivo.open("r", encoding="latin-1", errors="ignore") as f:
@@ -386,7 +456,7 @@ def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
                         if cod_part:
                             mapa_participantes[cod_part] = participante
                     elif registro == "D100":
-                        cod_part = _obter_campo(partes, INDICE_D100_COD_PART)
+                        cod_part = _obter_campo(partes, layout_d100["COD_PART"])
                         participante = mapa_participantes.get(cod_part, {})
                         registros.append(
                             {
@@ -394,11 +464,11 @@ def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
                                 "cod_part": cod_part,
                                 "nome_part": participante.get("nome_part", ""),
                                 "cnpj": participante.get("cnpj", ""),
-                                "num_nota": _obter_campo(partes, INDICE_D100_NUM_DOC),
-                                "serie": _obter_campo(partes, INDICE_D100_SERIE),
-                                "data": _obter_campo(partes, INDICE_D100_DT_DOC),
-                                "vl_item": _obter_campo(partes, INDICE_D100_VL_DOC),
-                                "cfop": _obter_campo(partes, INDICE_D100_CFOP),
+                                "num_nota": _obter_campo(partes, layout_d100["NUM_DOC"]),
+                                "serie": _obter_campo(partes, layout_d100["SERIE"]),
+                                "data": _obter_campo(partes, layout_d100["DT_DOC"]),
+                                "vl_item": _obter_campo(partes, layout_d100["VL_DOC"]),
+                                "cfop": _obter_campo(partes, layout_d100["CFOP"]),
                             }
                         )
         except OSError as exc:
@@ -419,10 +489,13 @@ def confrontar_d100(df_fiscal: pd.DataFrame, df_contribuicoes: pd.DataFrame) -> 
 
 
 def extrair_c500(arquivos_txt: List[Path]) -> pd.DataFrame:
-    """Extrai C500 (energia/comunicação) com enriquecimento de participante via 0150."""
+    """Extrai C500 (energia/comunicação) com camada dinâmica de layout por tipo/ano."""
     registros: List[Dict[str, str]] = []
 
     for arquivo in arquivos_txt:
+        tipo_sped, ano_layout = detectar_layout_sped(arquivo)
+        layout_c500 = obter_layout_registro(tipo_sped, ano_layout, "C500")
+
         mapa_participantes: Dict[str, Dict[str, str]] = {}
         try:
             with arquivo.open("r", encoding="latin-1", errors="ignore") as f:
@@ -438,7 +511,7 @@ def extrair_c500(arquivos_txt: List[Path]) -> pd.DataFrame:
                         if cod_part:
                             mapa_participantes[cod_part] = participante
                     elif registro == "C500":
-                        cod_part = _obter_campo(partes, INDICE_C500_COD_PART)
+                        cod_part = _obter_campo(partes, layout_c500["COD_PART"])
                         participante = mapa_participantes.get(cod_part, {})
                         registros.append(
                             {
@@ -446,10 +519,10 @@ def extrair_c500(arquivos_txt: List[Path]) -> pd.DataFrame:
                                 "cod_part": cod_part,
                                 "nome_part": participante.get("nome_part", ""),
                                 "cnpj": participante.get("cnpj", ""),
-                                "num_nota": _obter_campo(partes, INDICE_C500_NUM_DOC),
-                                "serie": _obter_campo(partes, INDICE_C500_SERIE),
-                                "data": _obter_campo(partes, INDICE_C500_DT_DOC),
-                                "vl_item": _obter_campo(partes, INDICE_C500_VL_DOC),
+                                "num_nota": _obter_campo(partes, layout_c500["NUM_DOC"]),
+                                "serie": _obter_campo(partes, layout_c500["SERIE"]),
+                                "data": _obter_campo(partes, layout_c500["DT_DOC"]),
+                                "vl_item": _obter_campo(partes, layout_c500["VL_DOC"]),
                                 "cfop": "",
                             }
                         )
