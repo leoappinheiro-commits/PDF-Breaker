@@ -347,6 +347,91 @@ def _ajustar_campos_d100(registro: Dict[str, str], partes: List[str], idx_data: 
     return registro
 
 
+def _extrair_chave_acesso_linha(linha: str) -> str:
+    """Extrai chave de acesso (44 dígitos) de uma linha SPED, quando existir."""
+    linha = (linha or "").replace("﻿", "")
+    match = re.search(r"(?<!\d)(\d{44})(?!\d)", linha)
+    return match.group(1) if match else ""
+
+
+def _ajustar_campos_c500(registro: Dict[str, str], partes: List[str], idx_data: int, idx_valor: int) -> Dict[str, str] | None:
+    """Aplica heurísticas para corrigir deslocamentos comuns de layout no C500."""
+    if not _parece_data(registro.get("data", "")):
+        for desloc in range(-2, 4):
+            candidato = _obter_campo(partes, idx_data + desloc)
+            if _parece_data(candidato):
+                registro["data"] = candidato
+                break
+
+    if not _parece_valor(registro.get("vl_item", "")):
+        for desloc in range(-2, 5):
+            candidato = _obter_campo(partes, idx_valor + desloc)
+            if _parece_valor(candidato):
+                registro["vl_item"] = candidato
+                break
+
+    if not registro.get("num_nota", "").strip() or not _parece_data(registro.get("data", "")):
+        return None
+
+    return registro
+
+
+def criar_chave_acesso_item(df: pd.DataFrame) -> pd.DataFrame:
+    """Cria chave baseada em chave de acesso + código do item (quando houver)."""
+    if df.empty:
+        df = df.copy()
+        df["chave_acesso_item"] = ""
+        return df
+
+    df = df.copy()
+    df["chave_acesso_item"] = (
+        df.get("chave_acesso", "").astype(str).str.strip()
+        + "|"
+        + df.get("cod_item", "").astype(str).str.strip()
+    )
+    return df
+
+
+def criar_chave_acesso_documento(df: pd.DataFrame) -> pd.DataFrame:
+    """Cria chave baseada apenas na chave de acesso (quando houver)."""
+    if df.empty:
+        df = df.copy()
+        df["chave_acesso_doc"] = ""
+        return df
+
+    df = df.copy()
+    df["chave_acesso_doc"] = df.get("chave_acesso", "").astype(str).str.strip()
+    return df
+
+
+def _confrontar_prioridade_chave_acesso(
+    df_fiscal: pd.DataFrame,
+    df_contrib: pd.DataFrame,
+    coluna_chave_acesso: str,
+    coluna_chave_fallback: str,
+) -> pd.DataFrame:
+    """Confronta priorizando chave de acesso para linhas com chave; fallback para demais."""
+    if df_fiscal.empty:
+        return df_fiscal.copy()
+
+    fiscal = df_fiscal.copy()
+    contrib = df_contrib.copy()
+
+    fiscal[coluna_chave_acesso] = fiscal[coluna_chave_acesso].astype(str).str.strip()
+    contrib[coluna_chave_acesso] = contrib[coluna_chave_acesso].astype(str).str.strip()
+
+    fiscal_com = fiscal[fiscal[coluna_chave_acesso] != ""]
+    fiscal_sem = fiscal[fiscal[coluna_chave_acesso] == ""]
+
+    chaves_acesso_contrib = set(contrib.loc[contrib[coluna_chave_acesso] != "", coluna_chave_acesso].tolist())
+    div_com = fiscal_com[~fiscal_com[coluna_chave_acesso].isin(chaves_acesso_contrib)]
+
+    chaves_fallback_contrib = set(contrib[coluna_chave_fallback].dropna().astype(str).tolist())
+    div_sem = fiscal_sem[~fiscal_sem[coluna_chave_fallback].isin(chaves_fallback_contrib)]
+
+    return pd.concat([div_com, div_sem], ignore_index=True)
+
+
 def extrair_0150(partes: List[str]) -> Dict[str, str]:
     """Extrai dados relevantes do registro 0150."""
     return {
@@ -415,6 +500,7 @@ def extrair_c170(arquivos_txt: List[Path], enriquecer: bool = False) -> pd.DataF
                             "num_nota": _obter_campo(partes, INDICE_C100_NUM_DOC),
                             "serie": _obter_campo(partes, INDICE_C100_SERIE),
                             "data": _obter_campo(partes, INDICE_C100_DT_DOC),
+                            "chave_acesso": _extrair_chave_acesso_linha(linha),
                         }
 
                     elif registro == "C170":
@@ -431,6 +517,7 @@ def extrair_c170(arquivos_txt: List[Path], enriquecer: bool = False) -> pd.DataF
                                 "num_nota": contexto_c100.get("num_nota", ""),
                                 "serie": contexto_c100.get("serie", ""),
                                 "data": contexto_c100.get("data", ""),
+                                "chave_acesso": contexto_c100.get("chave_acesso", ""),
                                 "cod_item": cod_item,
                                 "descr_item": item_info.get("descr_item", ""),
                                 "ncm": item_info.get("ncm", ""),
@@ -451,6 +538,7 @@ def extrair_c170(arquivos_txt: List[Path], enriquecer: bool = False) -> pd.DataF
         "num_nota",
         "serie",
         "data",
+        "chave_acesso",
         "cod_item",
         "descr_item",
         "ncm",
@@ -503,12 +591,13 @@ def criar_chave_documento(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def confrontar(df_fiscal: pd.DataFrame, df_contribuicoes: pd.DataFrame) -> pd.DataFrame:
-    """Retorna registros C170 presentes no Fiscal e ausentes no Contribuições."""
+    """Retorna C170 do Fiscal ausentes no Contribuições (prioriza chave de acesso+item)."""
     if df_fiscal.empty:
         return df_fiscal.copy()
 
-    chaves_contrib = set(df_contribuicoes["chave"].dropna().astype(str).tolist())
-    divergentes = df_fiscal[~df_fiscal["chave"].isin(chaves_contrib)].copy()
+    fiscal = criar_chave_acesso_item(df_fiscal)
+    contrib = criar_chave_acesso_item(df_contribuicoes)
+    divergentes = _confrontar_prioridade_chave_acesso(fiscal, contrib, "chave_acesso_item", "chave")
 
     colunas_saida = [
         "arquivo",
@@ -518,6 +607,7 @@ def confrontar(df_fiscal: pd.DataFrame, df_contribuicoes: pd.DataFrame) -> pd.Da
         "num_nota",
         "serie",
         "data",
+        "chave_acesso",
         "cod_item",
         "descr_item",
         "ncm",
@@ -565,6 +655,7 @@ def extrair_a170(arquivos_txt: List[Path]) -> pd.DataFrame:
                             "num_nota": _obter_campo(partes, INDICE_A100_NUM_DOC),
                             "serie": _obter_campo(partes, INDICE_A100_SERIE),
                             "data": _obter_campo(partes, INDICE_A100_DT_DOC),
+                            "chave_acesso": _extrair_chave_acesso_linha(linha),
                         }
 
                     elif registro == "A170" and contexto_a100.get("ind_oper") == "0":
@@ -577,24 +668,25 @@ def extrair_a170(arquivos_txt: List[Path]) -> pd.DataFrame:
                                 "num_nota": contexto_a100.get("num_nota", ""),
                                 "serie": contexto_a100.get("serie", ""),
                                 "data": contexto_a100.get("data", ""),
+                                "chave_acesso": contexto_a100.get("chave_acesso", ""),
                                 "cod_item": _obter_campo(partes, INDICE_A170_COD_ITEM),
                             }
                         )
         except OSError as exc:
             raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo}: {exc}") from exc
 
-    colunas = ["arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "cod_item"]
+    colunas = ["arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "chave_acesso", "cod_item"]
     return pd.DataFrame(registros, columns=colunas)
 
 
 def confrontar_c170_a170(df_c170_remanescente: pd.DataFrame, df_a170: pd.DataFrame) -> pd.DataFrame:
-    """Retorna C170 remanescente não encontrado em A170 (IND_OPER=0)."""
+    """Retorna C170 remanescente não encontrado em A170 (IND_OPER=0), priorizando chave de acesso+item."""
     if df_c170_remanescente.empty:
         return df_c170_remanescente.copy()
 
-    df_a170_chave = criar_chave(df_a170)
-    chaves_a170 = set(df_a170_chave["chave"].dropna().astype(str).tolist())
-    return df_c170_remanescente[~df_c170_remanescente["chave"].isin(chaves_a170)].copy()
+    fiscal = criar_chave_acesso_item(df_c170_remanescente)
+    a170 = criar_chave(criar_chave_acesso_item(df_a170))
+    return _confrontar_prioridade_chave_acesso(fiscal, a170, "chave_acesso_item", "chave")
 
 
 def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
@@ -632,6 +724,7 @@ def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
                             "data": _obter_campo(partes, layout_d100["DT_DOC"]),
                             "vl_item": _obter_campo(partes, layout_d100["VL_DOC"]),
                             "cfop": _obter_campo(partes, layout_d100.get("CFOP", -1)),
+                            "chave_acesso": _extrair_chave_acesso_linha(linha),
                         }
                         registro_d100 = _ajustar_campos_d100(registro_d100, partes, layout_d100["DT_DOC"])
                         if registro_d100 is not None:
@@ -639,18 +732,18 @@ def extrair_d100(arquivos_txt: List[Path]) -> pd.DataFrame:
         except OSError as exc:
             raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo}: {exc}") from exc
 
-    colunas = ["arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "vl_item", "cfop"]
+    colunas = ["arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "vl_item", "cfop", "chave_acesso"]
     return pd.DataFrame(registros, columns=colunas)
 
 
 def confrontar_d100(df_fiscal: pd.DataFrame, df_contribuicoes: pd.DataFrame) -> pd.DataFrame:
-    """Retorna D100 presentes no Fiscal e ausentes no Contribuições."""
+    """Retorna D100 do Fiscal ausentes no Contribuições (prioriza chave de acesso)."""
     if df_fiscal.empty:
         return df_fiscal.copy()
-    df_fiscal_chave = criar_chave_documento(df_fiscal)
-    df_contrib_chave = criar_chave_documento(df_contribuicoes)
-    chaves_contrib = set(df_contrib_chave["chave"].dropna().astype(str).tolist())
-    return df_fiscal_chave[~df_fiscal_chave["chave"].isin(chaves_contrib)].copy()
+
+    fiscal = criar_chave_documento(criar_chave_acesso_documento(df_fiscal))
+    contrib = criar_chave_documento(criar_chave_acesso_documento(df_contribuicoes))
+    return _confrontar_prioridade_chave_acesso(fiscal, contrib, "chave_acesso_doc", "chave")
 
 
 def extrair_c500(arquivos_txt: List[Path]) -> pd.DataFrame:
@@ -678,34 +771,41 @@ def extrair_c500(arquivos_txt: List[Path]) -> pd.DataFrame:
                     elif registro == "C500":
                         cod_part = _obter_campo(partes, layout_c500["COD_PART"])
                         participante = mapa_participantes.get(cod_part, {})
-                        registros.append(
-                            {
-                                "arquivo": arquivo.name,
-                                "cod_part": cod_part,
-                                "nome_part": participante.get("nome_part", ""),
-                                "cnpj": participante.get("cnpj", ""),
-                                "num_nota": _obter_campo(partes, layout_c500["NUM_DOC"]),
-                                "serie": _obter_campo(partes, layout_c500["SERIE"]),
-                                "data": _obter_campo(partes, layout_c500["DT_DOC"]),
-                                "vl_item": _obter_campo(partes, layout_c500["VL_DOC"]),
-                                "cfop": "",
-                            }
+                        registro_c500 = {
+                            "arquivo": arquivo.name,
+                            "cod_part": cod_part,
+                            "nome_part": participante.get("nome_part", ""),
+                            "cnpj": participante.get("cnpj", ""),
+                            "num_nota": _obter_campo(partes, layout_c500["NUM_DOC"]),
+                            "serie": _obter_campo(partes, layout_c500["SERIE"]),
+                            "data": _obter_campo(partes, layout_c500["DT_DOC"]),
+                            "vl_item": _obter_campo(partes, layout_c500["VL_DOC"]),
+                            "cfop": "",
+                            "chave_acesso": _extrair_chave_acesso_linha(linha),
+                        }
+                        registro_c500 = _ajustar_campos_c500(
+                            registro_c500,
+                            partes,
+                            layout_c500["DT_DOC"],
+                            layout_c500["VL_DOC"],
                         )
+                        if registro_c500 is not None:
+                            registros.append(registro_c500)
         except OSError as exc:
             raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo}: {exc}") from exc
 
-    colunas = ["arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "vl_item", "cfop"]
+    colunas = ["arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "vl_item", "cfop", "chave_acesso"]
     return pd.DataFrame(registros, columns=colunas)
 
 
 def confrontar_c500(df_fiscal: pd.DataFrame, df_contribuicoes: pd.DataFrame) -> pd.DataFrame:
-    """Retorna C500 presentes no Fiscal e ausentes no Contribuições."""
+    """Retorna C500 do Fiscal ausentes no Contribuições (prioriza chave de acesso)."""
     if df_fiscal.empty:
         return df_fiscal.copy()
-    df_fiscal_chave = criar_chave_documento(df_fiscal)
-    df_contrib_chave = criar_chave_documento(df_contribuicoes)
-    chaves_contrib = set(df_contrib_chave["chave"].dropna().astype(str).tolist())
-    return df_fiscal_chave[~df_fiscal_chave["chave"].isin(chaves_contrib)].copy()
+
+    fiscal = criar_chave_documento(criar_chave_acesso_documento(df_fiscal))
+    contrib = criar_chave_documento(criar_chave_acesso_documento(df_contribuicoes))
+    return _confrontar_prioridade_chave_acesso(fiscal, contrib, "chave_acesso_doc", "chave")
 
 
 def aplicar_filtro_cfop(df: pd.DataFrame, caminho_cfop: Path) -> pd.DataFrame:
