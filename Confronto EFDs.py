@@ -65,11 +65,47 @@ LAYOUTS = {
             "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
+        2015: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2016: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2017: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
         2018: {
             "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
+        2019: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2020: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2021: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2022: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
         2023: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2024: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2025: {
             "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
@@ -79,11 +115,47 @@ LAYOUTS = {
             "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
+        2015: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2016: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2017: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
         2018: {
             "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
+        2019: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2020: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2021: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2022: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
         2023: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2024: {
+            "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
+            "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
+        },
+        2025: {
             "D100": {"COD_PART": 4, "SERIE": 7, "NUM_DOC": 9, "DT_DOC": 11, "VL_DOC": 13, "CFOP": 15},
             "C500": {"COD_PART": 2, "SERIE": 5, "NUM_DOC": 8, "DT_DOC": 9, "VL_DOC": 11},
         },
