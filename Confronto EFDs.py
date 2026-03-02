@@ -11,6 +11,7 @@ Contribuições.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -183,28 +184,52 @@ class ProcessamentoErro(Exception):
 
 
 def detectar_layout_sped(arquivo_txt: Path) -> Tuple[str, int]:
-    """Detecta tipo de SPED e ano de layout com base no registro 0000."""
+    """Detecta tipo de SPED e ano de layout com busca robusta do registro 0000."""
     tipo_sped = "CONTRIBUICOES" if "contrib" in str(arquivo_txt).lower() else "FISCAL"
+    primeiras_linhas: List[str] = []
 
-    try:
-        with arquivo_txt.open("r", encoding="latin-1", errors="ignore") as f:
-            for linha in f:
-                if not linha.startswith("|"):
-                    continue
-                partes = linha.rstrip("\n\r").split("|")
-                if _obter_campo(partes, INDICE_REGISTRO) != "0000":
-                    continue
+    def _tentar_extrair_ano(partes: List[str]) -> int | None:
+        dt_ini = _obter_campo(partes, INDICE_0000_DT_INI)
+        if not dt_ini or len(dt_ini) < 4:
+            return None
+        sufixo = dt_ini[-4:]
+        return int(sufixo) if sufixo.isdigit() else None
 
-                dt_ini = _obter_campo(partes, INDICE_0000_DT_INI)
-                if len(dt_ini) < 4:
-                    raise ProcessamentoErro(
-                        f"Registro 0000 sem DT_INI válido no arquivo: {arquivo_txt}"
-                    )
+    for encoding in ("utf-8-sig", "latin-1"):
+        try:
+            with arquivo_txt.open("r", encoding=encoding, errors="ignore") as f:
+                for linha in f:
+                    linha_limpa = linha.lstrip().replace("\ufeff", "")
+                    if len(primeiras_linhas) < 10:
+                        primeiras_linhas.append(repr(linha_limpa.rstrip("\n\r")))
 
-                ano_layout = int(dt_ini[-4:])
-                return tipo_sped, ano_layout
-    except OSError as exc:
-        raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo_txt}: {exc}") from exc
+                    if "0000" not in linha_limpa:
+                        continue
+
+                    partes = linha_limpa.rstrip("\n\r").split("|")
+                    if "0000" not in partes:
+                        continue
+
+                    indice_0000 = partes.index("0000")
+                    ano_layout = _tentar_extrair_ano(partes)
+
+                    if ano_layout is None and (indice_0000 + 3) < len(partes):
+                        dt_ini_alt = partes[indice_0000 + 3].strip()
+                        if len(dt_ini_alt) >= 4 and dt_ini_alt[-4:].isdigit():
+                            ano_layout = int(dt_ini_alt[-4:])
+
+                    if ano_layout is None:
+                        raise ProcessamentoErro(
+                            f"Registro 0000 sem DT_INI válido no arquivo: {arquivo_txt}"
+                        )
+
+                    return tipo_sped, ano_layout
+        except OSError as exc:
+            raise ProcessamentoErro(f"Erro ao ler arquivo {arquivo_txt}: {exc}") from exc
+
+    logging.debug("Registro 0000 não localizado. Primeiras linhas do arquivo %s:", arquivo_txt)
+    for idx, linha_debug in enumerate(primeiras_linhas, start=1):
+        logging.debug("Linha %s: %s", idx, linha_debug)
 
     raise ProcessamentoErro(f"Registro 0000 não encontrado no arquivo: {arquivo_txt}")
 
