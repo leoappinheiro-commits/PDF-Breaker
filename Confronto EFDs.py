@@ -164,6 +164,66 @@ LAYOUTS = {
     },
 }
 
+
+
+COLUNAS_CNAE_CONFIG = [
+    "CNAE",
+    "Descrição",
+    "Regime_PIS_COFINS",
+    "Setor_Economico",
+    "Aplica_Credito_Presumido",
+    "Cadeia_Agro",
+    "Permite_Credito_Ativo",
+    "Permite_Credito_Energia",
+    "Permite_Credito_Frete",
+    "Permite_Credito_Aluguel",
+    "Permite_Credito_Armazenagem",
+    "Permite_Credito_Importacao",
+    "Permite_Credito_Exportacao",
+]
+
+COLUNAS_MATRIZ_CNAE = [
+    "CNAE",
+    "Tipo_Item",
+    "Permite_Credito",
+    "Peso_Score",
+    "Nivel_Risco",
+    "Fundamentacao_Tecnica",
+    "Observacao_Estrategica",
+]
+
+FUNDAMENTO_REGIME_CUMULATIVO = "Leis 10.637/2002 e 10.833/2003 - regime cumulativo não gera crédito"
+FUNDAMENTO_MONOFASICO = "Lei 10.925/2004, Lei 10.147/2000 e Lei 10.485/2002 - incidência concentrada/monofásica"
+FUNDAMENTO_ST = "IN RFB 2.121/2022 e Lei 9.718/1998 - vedação para itens sob substituição tributária"
+FUNDAMENTO_TEMA_779 = "Tema 779/STJ e IN RFB 2.121/2022 - essencialidade/relevância do insumo"
+FUNDAMENTO_AGRO = "Lei 10.925/2004 - hipóteses de crédito presumido para cadeia agro"
+FUNDAMENTO_DECRETO_8426 = "Decreto 8.426/2015 - contexto de alíquotas PIS/COFINS"
+
+MATRIZ_PADRAO = {
+    "Permite_Credito": "Depende",
+    "Peso_Score": 0,
+    "Nivel_Risco": "Médio",
+    "Fundamentacao_Tecnica": FUNDAMENTO_TEMA_779,
+    "Observacao_Estrategica": "Aplicar validação documental e jurídica específica.",
+}
+
+TIPO_ITEM_KEYWORDS = [
+    ("Energia", ["energia", "eletrica", "elétrica", "kwh", "c500"]),
+    ("Insumo_Produtivo", ["insumo", "materia prima", "matéria prima", "produto intermediario", "produto intermediário"]),
+    ("Embalagem", ["embalagem", "caixa", "rotulo", "rótulo", "saco", "filme"]),
+    ("Imobilizado", ["imobilizado", "ativo", "maquina", "máquina", "equipamento"]),
+    ("Manutencao_Industrial", ["manutencao", "manutenção", "industrial", "reparo", "lubrificante"]),
+    ("Frete_Aquisicao", ["frete", "transporte carga", "cte", "ct-e"]),
+    ("Armazenagem", ["armazenagem", "armazenamento", "estocagem"]),
+    ("Aluguel", ["aluguel", "locacao", "locação", "arrendamento"]),
+    ("Servico_Tecnico", ["servico tecnico", "serviço técnico", "engenharia", "assistencia tecnica", "assistência técnica"]),
+    ("Administrativo", ["administrativo", "contabilidade", "juridico", "jurídico", "rh", "recursos humanos"]),
+    ("Marketing_Publicidade", ["marketing", "publicidade", "propaganda", "midia", "mídia"]),
+    ("TI_Sistemas", ["software", "sistema", "ti", "tecnologia", "licenca", "licença"]),
+    ("Equipamento_Protecao", ["epi", "equipamento protecao", "equipamento proteção", "uniforme", "seguranca", "segurança"]),
+    ("Transporte_Funcionarios", ["vale transporte", "fretado", "transporte funcionarios", "transporte funcionários"]),
+]
+
 TIPO_ITEM_DESCRICAO = {
     "00": "Mercadoria para Revenda",
     "01": "Matéria-Prima",
@@ -212,8 +272,8 @@ def _parse_valor_brasileiro(serie: pd.Series) -> pd.Series:
     ).fillna(0.0)
 
 
-def carregar_cnae(main_dir: Path) -> Tuple[str, str]:
-    """Carrega CNAE principal a partir do arquivo CNAE.xlsx em MAIN_DIR."""
+def carregar_configuracao_cnae(main_dir: Path) -> Dict[str, str]:
+    """Carrega configuração tributária do CNAE principal em MAIN_DIR/CNAE.xlsx."""
     caminho_cnae = main_dir / "CNAE.xlsx"
     if not caminho_cnae.exists():
         raise ProcessamentoErro(f"Arquivo CNAE não encontrado: {caminho_cnae}")
@@ -223,41 +283,116 @@ def carregar_cnae(main_dir: Path) -> Tuple[str, str]:
     except Exception as exc:
         raise ProcessamentoErro(f"Erro ao ler arquivo CNAE {caminho_cnae}: {exc}") from exc
 
-    colunas_esperadas = {"CNAE", "Descrição"}
-    if not colunas_esperadas.issubset(df_cnae.columns):
-        raise ProcessamentoErro("Arquivo CNAE inválido. Colunas esperadas: 'CNAE' e 'Descrição'.")
+    colunas_obrigatorias = {"CNAE", "Descrição", "Regime_PIS_COFINS"}
+    if not colunas_obrigatorias.issubset(df_cnae.columns):
+        raise ProcessamentoErro(
+            "Arquivo CNAE inválido. Colunas mínimas esperadas: 'CNAE', 'Descrição' e 'Regime_PIS_COFINS'."
+        )
+
+    for coluna in COLUNAS_CNAE_CONFIG:
+        if coluna not in df_cnae.columns:
+            df_cnae[coluna] = ""
 
     df_cnae = df_cnae.dropna(subset=["CNAE"]).copy()
     if df_cnae.empty:
         raise ProcessamentoErro("Arquivo CNAE sem registros válidos na coluna 'CNAE'.")
 
-    cnae = re.sub(r"\D", "", str(df_cnae.iloc[0]["CNAE"]))
-    descricao = str(df_cnae.iloc[0]["Descrição"] or "").strip()
-    if not cnae:
+    registro = df_cnae.iloc[0].to_dict()
+    registro["CNAE"] = re.sub(r"\D", "", str(registro.get("CNAE", "")))
+    if not registro["CNAE"]:
         raise ProcessamentoErro("CNAE principal inválido no arquivo CNAE.xlsx.")
 
-    return cnae, descricao
+    return {col: str(registro.get(col, "") or "").strip() for col in COLUNAS_CNAE_CONFIG}
 
 
-def avaliar_credito_objetivo(ncm: str, descricao: str, cnae: str) -> Tuple[str, str, str]:
-    """Avalia regras objetivas de crédito conforme legislação e CNAE."""
+def carregar_cnae(main_dir: Path) -> Tuple[str, str]:
+    """Compatibilidade retroativa: retorna CNAE e descrição do principal."""
+    config = carregar_configuracao_cnae(main_dir)
+    return config["CNAE"], config["Descrição"]
+
+
+def carregar_matriz_cnae(main_dir: Path) -> pd.DataFrame:
+    """Carrega matriz CNAE x Tipo_Item; retorna vazio quando arquivo auxiliar não existir."""
+    caminho_matriz = main_dir / "Matriz_CNAE_Insumo.xlsx"
+    if not caminho_matriz.exists():
+        logging.warning("Matriz CNAE não encontrada: %s. Aplicando regras padrão.", caminho_matriz)
+        return pd.DataFrame(columns=COLUNAS_MATRIZ_CNAE)
+
+    try:
+        matriz_df = pd.read_excel(caminho_matriz, sheet_name="Sheet1")
+    except Exception as exc:
+        logging.warning("Erro ao ler Matriz_CNAE_Insumo.xlsx (%s). Aplicando regras padrão.", exc)
+        return pd.DataFrame(columns=COLUNAS_MATRIZ_CNAE)
+
+    for coluna in COLUNAS_MATRIZ_CNAE:
+        if coluna not in matriz_df.columns:
+            matriz_df[coluna] = ""
+
+    matriz_df = matriz_df[COLUNAS_MATRIZ_CNAE].copy()
+    matriz_df["CNAE"] = matriz_df["CNAE"].astype(str).str.replace(r"\D", "", regex=True).str.strip()
+    matriz_df["Tipo_Item"] = matriz_df["Tipo_Item"].astype(str).str.strip()
+    matriz_df["Permite_Credito"] = matriz_df["Permite_Credito"].astype(str).str.strip()
+    matriz_df["Nivel_Risco"] = matriz_df["Nivel_Risco"].astype(str).str.strip()
+    matriz_df["Fundamentacao_Tecnica"] = matriz_df["Fundamentacao_Tecnica"].astype(str).str.strip()
+    matriz_df["Observacao_Estrategica"] = matriz_df["Observacao_Estrategica"].astype(str).str.strip()
+    matriz_df["Peso_Score"] = pd.to_numeric(matriz_df["Peso_Score"], errors="coerce").fillna(0).astype(int)
+    return matriz_df
+
+
+def classificar_tipo_item(descricao_item: str) -> str:
+    """Classifica descrição em Tipo_Item estratégico via palavras-chave."""
+    descricao = _normalizar_texto(descricao_item)
+    for tipo_item, palavras in TIPO_ITEM_KEYWORDS:
+        if any(palavra in descricao for palavra in palavras):
+            return tipo_item
+    return "Insumo_Produtivo" if descricao else "Administrativo"
+
+
+def aplicar_matriz_cnae(row: pd.Series, config_cnae: Dict[str, str], matriz_df: pd.DataFrame) -> Dict[str, object]:
+    """Aplica regra da matriz CNAE x Tipo_Item com fallback padrão."""
+    tipo_item = classificar_tipo_item(row.get("descr_item", ""))
+    cnae = re.sub(r"\D", "", str(config_cnae.get("CNAE", "")))
+
+    if matriz_df.empty:
+        matriz_item = MATRIZ_PADRAO.copy()
+    else:
+        filtro = (matriz_df["CNAE"] == cnae) & (matriz_df["Tipo_Item"] == tipo_item)
+        matriz_match = matriz_df.loc[filtro].head(1)
+        matriz_item = matriz_match.iloc[0].to_dict() if not matriz_match.empty else MATRIZ_PADRAO.copy()
+
+    return {
+        "Tipo_Item": tipo_item,
+        "Permite_Credito_Matriz": str(matriz_item.get("Permite_Credito", MATRIZ_PADRAO["Permite_Credito"])) or MATRIZ_PADRAO["Permite_Credito"],
+        "Peso_Score_Matriz": int(pd.to_numeric(matriz_item.get("Peso_Score", 0), errors="coerce") or 0),
+        "Nivel_Risco_Matriz": str(matriz_item.get("Nivel_Risco", MATRIZ_PADRAO["Nivel_Risco"])) or MATRIZ_PADRAO["Nivel_Risco"],
+        "Fundamentacao_Tecnica_Matriz": str(matriz_item.get("Fundamentacao_Tecnica", MATRIZ_PADRAO["Fundamentacao_Tecnica"])) or MATRIZ_PADRAO["Fundamentacao_Tecnica"],
+        "Observacao_Estrategica": str(matriz_item.get("Observacao_Estrategica", MATRIZ_PADRAO["Observacao_Estrategica"])) or MATRIZ_PADRAO["Observacao_Estrategica"],
+    }
+
+
+def avaliar_credito_objetivo(ncm: str, descricao: str, cnae: str, config_cnae: Dict[str, str]) -> Tuple[str, str, str, str]:
+    """Avalia regime, hipóteses legais e vedações objetivas."""
     ncm_norm = _normalizar_ncm(ncm)
     descricao_norm = _normalizar_texto(descricao)
     cnae_norm = re.sub(r"\D", "", str(cnae or ""))
+    regime = _normalizar_texto(config_cnae.get("Regime_PIS_COFINS", ""))
+
+    if regime != "nao_cumulativo":
+        return "Crédito vedado", FUNDAMENTO_REGIME_CUMULATIVO, "Baixo", "Bloqueado_Regime"
 
     if ncm_norm in MONOFASICO_NCM:
-        return "Crédito vedado", "Lei 10.925/2004 - item monofásico", "Baixo"
+        return "Crédito vedado", FUNDAMENTO_MONOFASICO, "Baixo", "Vedacao_Monofasico"
 
     if ncm_norm in ST_NCM:
-        return "Crédito vedado", "IN RFB 2.121/2022 - item sujeito à ST", "Baixo"
+        return "Crédito vedado", FUNDAMENTO_ST, "Baixo", "Vedacao_ST"
 
     if any(serv in descricao_norm for serv in SERVICOS_SEM_CREDITO):
-        return "Crédito improvável", "Leis 10.637/2002 e 10.833/2003 - serviço administrativo", "Médio"
+        return "Crédito improvável", "Leis 10.637/2002 e 10.833/2003 - serviço sem vínculo de insumo", "Médio", "Hipotese_Fragil"
 
     if any(cnae_norm.startswith(prefixo) for prefixo in CNAE_AGRO_PREFIXOS):
-        return "Crédito possível", "Lei 10.925/2004 - atividade agro com análise específica", "Médio"
+        return "Crédito possível", FUNDAMENTO_AGRO, "Médio", "Hipotese_Agro"
 
-    return "Necessita análise interpretativa", "Tema 779/STJ (conceito de insumo)", "Médio"
+    return "Necessita análise interpretativa", f"{FUNDAMENTO_TEMA_779}; {FUNDAMENTO_DECRETO_8426}", "Médio", "Analise_Interpretativa"
 
 
 def calcular_score_credito(row: pd.Series) -> int:
@@ -288,13 +423,15 @@ def calcular_score_credito(row: pd.Series) -> int:
 
 
 def classificar_score(score: int) -> str:
-    if score >= 40:
-        return "Crédito provável"
-    if 10 <= score <= 39:
-        return "Crédito possível com risco"
-    if -10 <= score <= 9:
-        return "Necessita análise"
-    return "Crédito improvável/vedado"
+    if score >= 60:
+        return "Crédito Estratégico"
+    if 40 <= score <= 59:
+        return "Crédito Provável"
+    if 15 <= score <= 39:
+        return "Crédito Possível"
+    if -10 <= score <= 14:
+        return "Analisar"
+    return "Crédito Improvável"
 
 
 def gerar_resumo_oportunidades(df_analitico: pd.DataFrame) -> pd.DataFrame:
@@ -1016,10 +1153,41 @@ def gerar_resumo_por_fornecedor(df_divergente: pd.DataFrame) -> pd.DataFrame:
     return agrupado.sort_values(by="valor_item_total", ascending=False).reset_index(drop=True)
 
 
+def gerar_resumo_por_tipo_item(df_analitico: pd.DataFrame) -> pd.DataFrame:
+    if df_analitico.empty:
+        return pd.DataFrame(columns=["Tipo_Item", "Qtd_Itens", "Potencial_Credito_Total", "Score_Medio"])
+
+    return (
+        df_analitico.groupby("Tipo_Item", dropna=False, as_index=False)
+        .agg(
+            Qtd_Itens=("Tipo_Item", "size"),
+            Potencial_Credito_Total=("Potencial_Credito", "sum"),
+            Score_Medio=("Score_Credito", "mean"),
+        )
+        .sort_values(by="Potencial_Credito_Total", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def gerar_mapa_risco(df_analitico: pd.DataFrame) -> pd.DataFrame:
+    if df_analitico.empty:
+        return pd.DataFrame(columns=["Nivel_Risco", "Classificacao_Final", "Qtd_Itens", "Potencial_Credito_Total"])
+
+    return (
+        df_analitico.groupby(["Nivel_Risco", "Classificacao_Final"], dropna=False, as_index=False)
+        .agg(Qtd_Itens=("Classificacao_Final", "size"), Potencial_Credito_Total=("Potencial_Credito", "sum"))
+        .sort_values(by=["Nivel_Risco", "Potencial_Credito_Total"], ascending=[True, False])
+        .reset_index(drop=True)
+    )
+
+
 def gerar_saida(
     df_divergente: pd.DataFrame,
     df_resumo: pd.DataFrame,
     df_resumo_oportunidades: pd.DataFrame,
+    df_resumo_tipo_item: pd.DataFrame,
+    df_resumo_fornecedor_analitico: pd.DataFrame,
+    df_mapa_risco: pd.DataFrame,
     df_d100_divergente: pd.DataFrame,
     df_resumo_fretes: pd.DataFrame,
     df_c500_divergente: pd.DataFrame,
@@ -1029,9 +1197,12 @@ def gerar_saida(
     """Gera arquivo Excel com abas analíticas e resumos dos confrontos."""
     try:
         with pd.ExcelWriter(caminho_saida) as writer:
-            df_divergente.to_excel(writer, sheet_name="Analitico", index=False)
+            df_divergente.to_excel(writer, sheet_name="ANALÍTICO", index=False)
             df_resumo.to_excel(writer, sheet_name="Resumo Sintetico", index=False)
             df_resumo_oportunidades.to_excel(writer, sheet_name="Resumo_Oportunidades", index=False)
+            df_resumo_tipo_item.to_excel(writer, sheet_name="Resumo_Por_Tipo_Item", index=False)
+            df_resumo_fornecedor_analitico.to_excel(writer, sheet_name="Resumo_Por_Fornecedor", index=False)
+            df_mapa_risco.to_excel(writer, sheet_name="Mapa_Risco", index=False)
             df_d100_divergente.to_excel(writer, sheet_name="Analitico - Fretes", index=False)
             df_resumo_fretes.to_excel(writer, sheet_name="Resumo - Fretes", index=False)
             df_c500_divergente.to_excel(writer, sheet_name="Analitico - C500", index=False)
@@ -1059,27 +1230,107 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
     caminho_cfop = pasta_resultado / "TAX Engine _ CFOP.xlsx"
     df_divergente_filtrado = aplicar_filtro_cfop(df_divergente, caminho_cfop)
 
-    cnae_principal, _ = carregar_cnae(main_dir)
+    config_cnae = carregar_configuracao_cnae(main_dir)
+    cnae_principal = config_cnae["CNAE"]
+    matriz_cnae_df = carregar_matriz_cnae(main_dir)
+
     df_divergente_filtrado = df_divergente_filtrado.copy()
     df_divergente_filtrado["CNAE"] = cnae_principal
+    df_divergente_filtrado["Tipo_Item"] = df_divergente_filtrado["descr_item"].map(classificar_tipo_item)
 
     if df_divergente_filtrado.empty:
-        df_divergente_filtrado["Classificacao_Objetiva"] = pd.Series(dtype="object")
-        df_divergente_filtrado["Fundamento_Objetivo"] = pd.Series(dtype="object")
-        df_divergente_filtrado["Risco_Objetivo"] = pd.Series(dtype="object")
-        df_divergente_filtrado["Score_Credito"] = pd.Series(dtype="int64")
-        df_divergente_filtrado["Classificacao_Final"] = pd.Series(dtype="object")
+        for coluna in [
+            "Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo", "Status_Camada", "Fundamento_Legal",
+            "Nivel_Risco", "Permite_Credito_Matriz", "Peso_Score_Matriz", "Score_Base", "Score_Credito",
+            "Classificacao_Final", "Observacao_Estrategica",
+        ]:
+            df_divergente_filtrado[coluna] = pd.Series(dtype="object")
     else:
         avaliacao_objetiva = df_divergente_filtrado.apply(
-            lambda row: avaliar_credito_objetivo(row.get("ncm", ""), row.get("descr_item", ""), cnae_principal),
+            lambda row: avaliar_credito_objetivo(
+                row.get("ncm", ""), row.get("descr_item", ""), cnae_principal, config_cnae
+            ),
             axis=1,
             result_type="expand",
         )
-        avaliacao_objetiva.columns = ["Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo"]
-        df_divergente_filtrado[["Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo"]] = avaliacao_objetiva
+        avaliacao_objetiva.columns = ["Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo", "Status_Camada"]
+        df_divergente_filtrado[["Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo", "Status_Camada"]] = avaliacao_objetiva
 
-        df_divergente_filtrado["Score_Credito"] = df_divergente_filtrado.apply(calcular_score_credito, axis=1)
+        if matriz_cnae_df.empty:
+            df_divergente_filtrado["Permite_Credito_Matriz"] = MATRIZ_PADRAO["Permite_Credito"]
+            df_divergente_filtrado["Peso_Score_Matriz"] = MATRIZ_PADRAO["Peso_Score"]
+            df_divergente_filtrado["Nivel_Risco_Matriz"] = MATRIZ_PADRAO["Nivel_Risco"]
+            df_divergente_filtrado["Fundamentacao_Tecnica_Matriz"] = MATRIZ_PADRAO["Fundamentacao_Tecnica"]
+            df_divergente_filtrado["Observacao_Estrategica"] = MATRIZ_PADRAO["Observacao_Estrategica"]
+        else:
+            matriz_lookup = matriz_cnae_df.rename(
+                columns={
+                    "Permite_Credito": "Permite_Credito_Matriz",
+                    "Peso_Score": "Peso_Score_Matriz",
+                    "Nivel_Risco": "Nivel_Risco_Matriz",
+                    "Fundamentacao_Tecnica": "Fundamentacao_Tecnica_Matriz",
+                }
+            )
+            matriz_lookup = matriz_lookup.drop_duplicates(subset=["CNAE", "Tipo_Item"], keep="first")
+            df_divergente_filtrado = df_divergente_filtrado.merge(
+                matriz_lookup[
+                    [
+                        "CNAE",
+                        "Tipo_Item",
+                        "Permite_Credito_Matriz",
+                        "Peso_Score_Matriz",
+                        "Nivel_Risco_Matriz",
+                        "Fundamentacao_Tecnica_Matriz",
+                        "Observacao_Estrategica",
+                    ]
+                ],
+                on=["CNAE", "Tipo_Item"],
+                how="left",
+            )
+            df_divergente_filtrado["Permite_Credito_Matriz"] = df_divergente_filtrado["Permite_Credito_Matriz"].fillna(
+                MATRIZ_PADRAO["Permite_Credito"]
+            )
+            df_divergente_filtrado["Peso_Score_Matriz"] = pd.to_numeric(
+                df_divergente_filtrado["Peso_Score_Matriz"], errors="coerce"
+            ).fillna(MATRIZ_PADRAO["Peso_Score"])
+            df_divergente_filtrado["Nivel_Risco_Matriz"] = df_divergente_filtrado["Nivel_Risco_Matriz"].fillna(
+                MATRIZ_PADRAO["Nivel_Risco"]
+            )
+            df_divergente_filtrado["Fundamentacao_Tecnica_Matriz"] = df_divergente_filtrado[
+                "Fundamentacao_Tecnica_Matriz"
+            ].fillna(MATRIZ_PADRAO["Fundamentacao_Tecnica"])
+            df_divergente_filtrado["Observacao_Estrategica"] = df_divergente_filtrado["Observacao_Estrategica"].fillna(
+                MATRIZ_PADRAO["Observacao_Estrategica"]
+            )
+
+        df_divergente_filtrado["Score_Base"] = df_divergente_filtrado.apply(calcular_score_credito, axis=1)
+        ajuste_fornecedor = (
+            df_divergente_filtrado["cnpj"].astype(str).str.replace(r"\D", "", regex=True).str.len().eq(14).astype(int) * 5
+        )
+        ajuste_agro = (
+            df_divergente_filtrado["Status_Camada"].eq("Hipotese_Agro").astype(int)
+            * 15
+            * (_normalizar_texto(config_cnae.get("Aplica_Credito_Presumido", "")).startswith("sim"))
+        )
+        ajuste_matriz_permissao = df_divergente_filtrado["Permite_Credito_Matriz"].str.lower().map({"sim": 10, "não": -20, "nao": -20, "depende": 0}).fillna(0)
+
+        df_divergente_filtrado["Score_Credito"] = (
+            df_divergente_filtrado["Score_Base"].astype(int)
+            + df_divergente_filtrado["Peso_Score_Matriz"].astype(int)
+            + ajuste_fornecedor.astype(int)
+            + ajuste_agro.astype(int)
+            + ajuste_matriz_permissao.astype(int)
+        )
         df_divergente_filtrado["Classificacao_Final"] = df_divergente_filtrado["Score_Credito"].apply(classificar_score)
+        df_divergente_filtrado["Nivel_Risco"] = df_divergente_filtrado["Nivel_Risco_Matriz"].where(
+            df_divergente_filtrado["Nivel_Risco_Matriz"].astype(str).str.len() > 0,
+            df_divergente_filtrado["Risco_Objetivo"],
+        )
+        df_divergente_filtrado["Fundamento_Legal"] = (
+            df_divergente_filtrado["Fundamento_Objetivo"].astype(str)
+            + " | "
+            + df_divergente_filtrado["Fundamentacao_Tecnica_Matriz"].astype(str)
+        ).str.strip(" |")
 
     df_divergente_filtrado["vl_item_num"] = _parse_valor_brasileiro(df_divergente_filtrado["vl_item"])
     df_divergente_filtrado["Potencial_Credito"] = df_divergente_filtrado["vl_item_num"] * 0.0925
@@ -1087,8 +1338,18 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
         by=["Score_Credito", "Potencial_Credito"], ascending=[False, False]
     ).reset_index(drop=True)
 
+    colunas_analitico = [
+        "arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "cod_item", "descr_item", "ncm",
+        "tipo_item", "tipo_item_desc", "cfop", "vl_item", "CNAE", "Status_Camada", "Tipo_Item", "Score_Credito",
+        "Classificacao_Final", "Nivel_Risco", "Fundamento_Legal", "Potencial_Credito", "Observacao_Estrategica",
+    ]
+    df_divergente_filtrado = df_divergente_filtrado[[c for c in colunas_analitico if c in df_divergente_filtrado.columns]]
+
     df_resumo = gerar_resumo_sintetico(df_divergente_filtrado)
     df_resumo_oportunidades = gerar_resumo_oportunidades(df_divergente_filtrado)
+    df_resumo_tipo_item = gerar_resumo_por_tipo_item(df_divergente_filtrado)
+    df_resumo_fornecedor_analitico = gerar_resumo_por_fornecedor(df_divergente_filtrado)
+    df_mapa_risco = gerar_mapa_risco(df_divergente_filtrado)
 
     df_d100_fiscal = extrair_d100(arquivos_fiscal)
     df_d100_contrib = extrair_d100(arquivos_contrib)
@@ -1105,6 +1366,9 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
         df_divergente_filtrado,
         df_resumo,
         df_resumo_oportunidades,
+        df_resumo_tipo_item,
+        df_resumo_fornecedor_analitico,
+        df_mapa_risco,
         df_d100_divergente,
         df_resumo_fretes,
         df_c500_divergente,
@@ -1113,7 +1377,7 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
     )
 
     total_vedado_automatico = int((df_divergente_filtrado["Classificacao_Objetiva"] == "Crédito vedado").sum())
-    total_credito_provavel = int((df_divergente_filtrado["Classificacao_Final"] == "Crédito provável").sum())
+    total_credito_provavel = int((df_divergente_filtrado["Classificacao_Final"] == "Crédito Provável").sum())
     potencial_total = float(df_divergente_filtrado["Potencial_Credito"].sum())
 
     return (
