@@ -1241,10 +1241,11 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
     if df_divergente_filtrado.empty:
         for coluna in [
             "Classificacao_Objetiva", "Fundamento_Objetivo", "Risco_Objetivo", "Status_Camada", "Fundamento_Legal",
-            "Nivel_Risco", "Permite_Credito_Matriz", "Peso_Score_Matriz", "Score_Base", "Score_Credito",
-            "Classificacao_Final", "Observacao_Estrategica",
+            "Nivel_Risco", "Permite_Credito_Matriz", "Classificacao_Final", "Observacao_Estrategica",
         ]:
             df_divergente_filtrado[coluna] = pd.Series(dtype="object")
+        for coluna in ["Peso_Score_Matriz", "Score_Base", "Score_Credito"]:
+            df_divergente_filtrado[coluna] = pd.Series(dtype="float64")
     else:
         avaliacao_objetiva = df_divergente_filtrado.apply(
             lambda row: avaliar_credito_objetivo(
@@ -1332,11 +1333,20 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
             + df_divergente_filtrado["Fundamentacao_Tecnica_Matriz"].astype(str)
         ).str.strip(" |")
 
+    if "Classificacao_Objetiva" not in df_divergente_filtrado.columns:
+        df_divergente_filtrado["Classificacao_Objetiva"] = ""
+    if "Classificacao_Final" not in df_divergente_filtrado.columns:
+        df_divergente_filtrado["Classificacao_Final"] = ""
+
     df_divergente_filtrado["vl_item_num"] = _parse_valor_brasileiro(df_divergente_filtrado["vl_item"])
     df_divergente_filtrado["Potencial_Credito"] = df_divergente_filtrado["vl_item_num"] * 0.0925
     df_divergente_filtrado = df_divergente_filtrado.sort_values(
         by=["Score_Credito", "Potencial_Credito"], ascending=[False, False]
     ).reset_index(drop=True)
+
+    total_vedado_automatico = int((df_divergente_filtrado["Classificacao_Objetiva"] == "Crédito vedado").sum())
+    total_credito_provavel = int((df_divergente_filtrado["Classificacao_Final"] == "Crédito Provável").sum())
+    potencial_total = float(df_divergente_filtrado["Potencial_Credito"].sum())
 
     colunas_analitico = [
         "arquivo", "cod_part", "nome_part", "cnpj", "num_nota", "serie", "data", "cod_item", "descr_item", "ncm",
@@ -1375,10 +1385,6 @@ def executar(main_dir: Path) -> Tuple[int, int, int, int, int, int, int, float, 
         df_resumo_c500,
         arquivo_saida,
     )
-
-    total_vedado_automatico = int((df_divergente_filtrado["Classificacao_Objetiva"] == "Crédito vedado").sum())
-    total_credito_provavel = int((df_divergente_filtrado["Classificacao_Final"] == "Crédito Provável").sum())
-    potencial_total = float(df_divergente_filtrado["Potencial_Credito"].sum())
 
     return (
         len(df_fiscal),
