@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 PIS_PATTERN = re.compile(r"\b(\d{3}\s*[.\-]?\s*\d{5}\s*[.\-]?\s*\d{2}\s*-\s*\d)\b")
 MONEY_PATTERN = re.compile(r"\b(?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}\b")
-OCR_MONEY_PATTERN = re.compile(r"\d[\d\s.:,]*,\s*\d{2}")
+OCR_MONEY_PATTERN = re.compile(r"(?:[:.]\s*)?[\dBO][\dBO\s.:,]*,\s*\d{2}")
 DATE_PATTERN = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
 CATEGORY_PATTERN = re.compile(r"\b\d{2}\b")
 CBO_PATTERN = re.compile(r"^\s*(\d{5})\s*$")
@@ -28,12 +28,6 @@ HEADER_VARIATIONS = [
     "NOME TRABALHADOR PIS",
     "NOME TRABALHADOR PIS/PASEP",
     "NOME TRABALHADOR PIS/PASEP/CI",
-]
-MODEL_DOC_HINT = "fgts 51775690000100 e filiais 012007text"
-MODEL_EXPECTED_CONTRIBS = [
-    116.72, 195.94, 124.92, 104.61, 198.77,
-    98.29, 61.24, 75.68, 262.65, 99.28,
-    163.92, 240.92, 308.20, 168.33, 79.62,
 ]
 
 
@@ -59,8 +53,6 @@ class SefipParser:
         resumo_rows: List[Dict] = []
         trabalhadores_rows: List[Dict] = []
 
-        model_reference = self._load_model_reference_contribs(pdf_files)
-
         for pdf_file in tqdm(pdf_files, desc="Processando PDFs"):
             LOGGER.info("Arquivo sendo processado: %s", pdf_file.name)
             page_texts = self._extract_text_by_strategy(pdf_file)
@@ -81,8 +73,6 @@ class SefipParser:
             trab_pages = [p.text for p in classified_pages if p.section == "trabalhadores"]
             trab_pages_text = "\n".join(trab_pages).strip() or full_text
             rows = self._parse_trabalhadores(trab_pages_text, pdf_file.name)
-            if model_reference and MODEL_DOC_HINT in pdf_file.stem.lower():
-                self._validate_model_mapping(rows, model_reference)
             trabalhadores_rows.extend(rows)
 
         return ParseResult(
@@ -102,47 +92,77 @@ class SefipParser:
         return self.ocr.extract_texts(pixmaps)
 
     def _parse_trabalhadores(self, text: str, file_name: str) -> List[Dict]:
-        """Reconstrói trabalhadores combinando blocos identificação, previdenciário e FGTS."""
+        """Parser estrutural SEFIP: PIS -> remuneração -> admissão -> contribuição."""
         if not text.strip():
             return []
 
         linhas = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        trabalhadores = self._extract_identification_block(linhas, file_name)
+        rows: List[Dict] = []
 
-        previdenciario = self._extract_previdenciario_block(linhas)
-        contribuicoes = self._extract_contribuicoes(linhas)
-        fgts = self._extract_fgts_block(linhas)
+        for idx, linha in enumerate(linhas):
+            if self._is_worker_header_line(linha):
+                continue
 
-        for idx, worker in enumerate(trabalhadores):
-            prev = previdenciario[idx] if idx < len(previdenciario) else {}
-            fgts_item = fgts[idx] if idx < len(fgts) else {}
+            match_pis = PIS_PATTERN.search(linha)
+            if not match_pis:
+                continue
 
-            # Mapeamento posicional obrigatório entre blocos.
-            contrib = contribuicoes[idx] if idx < len(contribuicoes) else None
-            if contrib is not None and worker.get("Rem_Sem_13") == contrib:
-                LOGGER.warning(
-                    "Contrib_Segurado igual a Rem_Sem_13 (possível erro de parsing) para PIS %s no arquivo %s",
-                    worker.get("PIS"),
-                    file_name,
-                )
-                contrib = None
+            nome = linha[: match_pis.start()].strip(" -:	")
+            pis = self._normalize_pis(match_pis.group(1))
+            if not nome or not pis:
+                continue
 
-            worker["Admissao"] = prev.get("Admissao")
-            worker["Contrib_Segurado"] = contrib
-            worker["Categoria"] = prev.get("Categoria")
-            worker["Ocor"] = prev.get("Ocor")
-            worker["Data_Movimentacao"] = prev.get("Data_Movimentacao")
-            worker["Deposito_FGTS"] = fgts_item.get("Deposito_FGTS")
-            worker["CBO"] = fgts_item.get("CBO")
+            rem_sem_13, rem_13, base_13 = self._extract_remuneracoes(linhas, idx)
+            admissao, contrib = self._extract_admissao_contrib_seq(linhas, idx)
 
-        LOGGER.info(
-            "Trabalhadores extraídos de %s: %d (prev=%d, fgts=%d)",
-            file_name,
-            len(trabalhadores),
-            len(previdenciario),
-            len(fgts),
-        )
-        return trabalhadores
+            rows.append(
+                {
+                    "Arquivo": file_name,
+                    "Nome_Trabalhador": nome,
+                    "PIS": pis,
+                    "Rem_Sem_13": rem_sem_13,
+                    "Rem_13": rem_13,
+                    "Base_13_Prev": base_13,
+                    "Admissao": admissao,
+                    "Contrib_Segurado": contrib,
+                }
+            )
+
+        self._log_first_rows_preview(rows)
+        LOGGER.info("Trabalhadores extraídos de %s: %d", file_name, len(rows))
+        return rows
+
+    def _extract_admissao_contrib_seq(self, linhas: List[str], idx: int) -> tuple[Optional[str], Optional[float]]:
+        """Após linha do PIS, busca admissão em +2/+3 e contribuição na linha seguinte."""
+        for offset in (2, 3):
+            adm_idx = idx + offset
+            if adm_idx >= len(linhas):
+                break
+            adm_line = self._normalize_numbers_text(linhas[adm_idx])
+            date_match = DATE_PATTERN.search(adm_line)
+            if not date_match:
+                continue
+
+            contrib_idx = adm_idx + 1
+            if contrib_idx >= len(linhas):
+                return date_match.group(0), None
+
+            contrib_values = self._extract_money_values(linhas[contrib_idx])
+            contrib = self._to_float_or_none(contrib_values[0]) if contrib_values else None
+            contrib = self._sanitize_expected_range(contrib, "Contrib_Segurado", 50, 1000)
+            return date_match.group(0), contrib
+
+        return None, None
+
+    def _log_first_rows_preview(self, rows: List[Dict]) -> None:
+        """Log rápido das primeiras linhas para validação estrutural sem prints permanentes."""
+        for row in rows[:20]:
+            LOGGER.debug(
+                "DEBUG_PREVIEW | Nome=%s | Rem_Sem_13=%s | Contrib_Segurado=%s",
+                row.get("Nome_Trabalhador"),
+                row.get("Rem_Sem_13"),
+                row.get("Contrib_Segurado"),
+            )
 
     def _extract_identification_block(self, linhas: List[str], file_name: str) -> List[Dict]:
         trabalhadores: List[Dict] = []
@@ -195,43 +215,6 @@ class SefipParser:
         rem_13 = self._to_float_or_none(values[1]) if len(values) > 1 else None
         base_13 = self._to_float_or_none(values[2]) if len(values) > 2 else None
         return rem_sem_13, rem_13, base_13
-
-    def _load_model_reference_contribs(self, pdf_files: List[Path]) -> Optional[List[float]]:
-        """Lê a 1ª página do documento modelo para validar associação posicional."""
-        model_pdf = next((p for p in pdf_files if MODEL_DOC_HINT in p.stem.lower()), None)
-        if not model_pdf:
-            return None
-
-        try:
-            load_result = self.reader.load(model_pdf)
-            first_page_text = load_result.page_texts[0].text if load_result.page_texts else ""
-            if not first_page_text:
-                pixmaps = self.reader.render_pages_as_images(model_pdf)
-                first_page_text = self.ocr.extract_texts(pixmaps[:1])[0] if pixmaps else ""
-
-            contribs = [c for c in self._extract_contribuicoes(first_page_text.splitlines()) if c is not None]
-            LOGGER.info("Documento modelo detectado. Contribuições na 1ª página: %d", len(contribs))
-
-            if contribs and len(contribs) != len(MODEL_EXPECTED_CONTRIBS):
-                LOGGER.warning(
-                    "Modelo com quantidade inesperada de contribuições: %d (esperado=%d)",
-                    len(contribs),
-                    len(MODEL_EXPECTED_CONTRIBS),
-                )
-            return contribs or None
-        except Exception as exc:
-            LOGGER.warning("Falha ao validar documento modelo (%s): %s", model_pdf.name, exc)
-            return None
-
-    def _validate_model_mapping(self, workers: List[Dict], contribs: List[float]) -> None:
-        if len(workers) != len(contribs):
-            LOGGER.warning(
-                "Desalinhamento estrutural no modelo: trabalhadores=%d, contribuições=%d",
-                len(workers),
-                len(contribs),
-            )
-            return
-        LOGGER.info("Modelo validado com mapeamento 1:1 de trabalhadores e contribuições.")
 
     def _extract_previdenciario_block(self, linhas: List[str]) -> List[Dict]:
         entries: List[Dict] = []
@@ -289,6 +272,8 @@ class SefipParser:
         normalized = normalized.replace("B", "8")
         normalized = normalized.replace("O", "0")
         normalized = normalized.replace(":.", "1")
+        normalized = normalized.replace("::", "1")
+        normalized = re.sub(r"^\s*[:.]\s*(?=\d)", "1", normalized)
         normalized = normalized.replace(";", ",")
         normalized = re.sub(r"\s+,\s*", ",", normalized)
         normalized = re.sub(r"\s+\.\s*", ".", normalized)
@@ -299,6 +284,7 @@ class SefipParser:
     def _normalize_ocr_value_token(self, token: str) -> str:
         """Reconstrói token monetário para formato BRL válido."""
         normalized = self._normalize_numbers_text(token).replace(" ", "")
+        normalized = re.sub(r"^[.:](?=\d)", "1", normalized)
         normalized = re.sub(r"[^\d,\.]", "", normalized)
 
         if "," in normalized:
