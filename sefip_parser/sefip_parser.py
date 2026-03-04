@@ -4,9 +4,10 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
+from rapidfuzz import fuzz
 from tqdm import tqdm
 
 from .ocr_engine import OcrEngine
@@ -15,6 +16,15 @@ from .pdf_reader import PdfReader
 from .regex_extractor import RegexExtractor
 
 LOGGER = logging.getLogger(__name__)
+
+PIS_PATTERN = re.compile(r"\b(\d{3}\s*[.\-]?\s*\d{5}\s*[.\-]?\s*\d{2}\s*-\s*\d)\b")
+MONEY_PATTERN = re.compile(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b")
+HEADER_VARIATIONS = [
+    "NOME TRABALHADOR",
+    "NOME TRABALHADOR PIS",
+    "NOME TRABALHADOR PIS/PASEP",
+    "NOME TRABALHADOR PIS/PASEP/CI",
+]
 
 
 @dataclass
@@ -56,9 +66,8 @@ class SefipParser:
             empresa_rows.append(empresa_row)
             resumo_rows.append(resumo_row)
 
-            trab_pages_text = "\n".join(
-                p.text for p in classified_pages if p.section == "trabalhadores"
-            )
+            trab_pages = [p.text for p in classified_pages if p.section == "trabalhadores"]
+            trab_pages_text = "\n".join(trab_pages).strip() or full_text
             trabalhadores_rows.extend(self._parse_trabalhadores(trab_pages_text, pdf_file.name))
 
         return ParseResult(
@@ -78,48 +87,77 @@ class SefipParser:
         return self.ocr.extract_texts(pixmaps)
 
     def _parse_trabalhadores(self, text: str, file_name: str) -> List[Dict]:
-        """Converte bloco textual de trabalhadores para linhas estruturadas."""
+        """Parser vertical da SEFIP: linha de nome+PIS seguida por linha de remuneração."""
         rows: List[Dict] = []
         if not text.strip():
             return rows
 
-        for line in text.splitlines():
-            clean = " ".join(line.split())
-            if not clean or "PIS" in clean.upper() and "NOME" in clean.upper():
+        linhas = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+        for idx, linha in enumerate(linhas):
+            if self._is_worker_header_line(linha):
                 continue
 
-            # Split por 2+ espaços para preservar nomes com espaço
-            parts = re.split(r"\s{2,}", line.strip())
-            if len(parts) < 6:
+            match_pis = PIS_PATTERN.search(linha)
+            if not match_pis:
                 continue
 
-            pis = self._extract_pis(parts[0])
-            if not pis:
+            nome = linha[: match_pis.start()].strip(" -:\t")
+            pis = self._normalize_pis(match_pis.group(1))
+            if not nome or not pis:
                 continue
 
-            nome = parts[1].strip()
-            rem, base_fgts, fgts, inss = [self._to_float_or_none(v) for v in parts[2:6]]
+            remuneracao = self._extract_remuneracao_from_next_lines(linhas, idx)
+            if remuneracao is None:
+                LOGGER.debug("Remuneração não encontrada para PIS %s no arquivo %s", pis, file_name)
+
             rows.append(
                 {
                     "Arquivo": file_name,
-                    "PIS": pis,
                     "Nome": nome,
-                    "Remuneracao": rem,
-                    "Base_FGTS": base_fgts,
-                    "FGTS": fgts,
-                    "INSS": inss,
+                    "PIS": pis,
+                    "Remuneracao": remuneracao,
                 }
             )
+
+        LOGGER.info("Trabalhadores extraídos de %s: %d", file_name, len(rows))
         return rows
 
+    def _extract_remuneracao_from_next_lines(self, linhas: List[str], idx: int) -> Optional[float]:
+        # Busca nas 3 linhas seguintes para tolerar quebras de OCR/layout.
+        for jump in (1, 2, 3):
+            target_idx = idx + jump
+            if target_idx >= len(linhas):
+                break
+
+            target = linhas[target_idx]
+            values = MONEY_PATTERN.findall(target)
+            if not values:
+                continue
+            return self._to_float_or_none(values[0])
+
+        return None
+
     @staticmethod
-    def _extract_pis(text: str) -> str | None:
-        match = re.search(r"\b\d{11}\b", re.sub(r"\D", "", text))
-        return match.group(0) if match else None
+    def _normalize_pis(pis_text: str) -> Optional[str]:
+        only_digits = re.sub(r"\D", "", pis_text)
+        return only_digits if len(only_digits) == 11 else None
+
+    def _is_worker_header_line(self, line: str) -> bool:
+        norm = self._normalize_text(line)
+        for expected in HEADER_VARIATIONS:
+            score = fuzz.partial_ratio(self._normalize_text(expected), norm)
+            if score >= 78:
+                return True
+        return False
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        return " ".join(text.upper().replace("Ç", "C").replace("Ã", "A").replace("Á", "A").split())
 
     def _to_float_or_none(self, text: str) -> float | None:
         try:
             return self.regex.normalize_brl_number(text)
-        except ValueError:
+        except (TypeError, ValueError):
             LOGGER.warning("Erro de parsing de valor: %s", text)
             return None
