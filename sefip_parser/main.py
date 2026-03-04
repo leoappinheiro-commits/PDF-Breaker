@@ -4,7 +4,6 @@ import argparse
 import logging
 from pathlib import Path
 
-from .excel_exporter import ExcelExporter
 from .sefip_parser import SefipParser
 
 
@@ -16,6 +15,9 @@ def configure_logging(level: str = "INFO") -> None:
 
 
 def processar_pasta(input_dir: Path, output_file: Path, tesseract_cmd: str | None = None) -> None:
+    # Import lazy para permitir `--help` mesmo sem dependências opcionais instaladas.
+    from .excel_exporter import ExcelExporter
+
     parser = SefipParser(tesseract_cmd=tesseract_cmd)
     result = parser.process_folder(input_dir)
     ExcelExporter().export(result.empresa_df, result.trabalhadores_df, result.resumo_df, output_file)
@@ -23,7 +25,13 @@ def processar_pasta(input_dir: Path, output_file: Path, tesseract_cmd: str | Non
 
 def main() -> None:
     argp = argparse.ArgumentParser(description="Extrator inteligente de PDFs SEFIP RE")
-    argp.add_argument("input_dir", type=Path, help="Pasta com PDFs SEFIP")
+    argp.add_argument(
+        "input_dir",
+        type=Path,
+        nargs="?",
+        default=Path("PDF"),
+        help="Pasta com PDFs SEFIP (padrão: ./PDF)",
+    )
     argp.add_argument(
         "--output",
         type=Path,
