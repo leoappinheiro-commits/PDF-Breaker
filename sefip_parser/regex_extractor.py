@@ -19,7 +19,7 @@ class RegexExtractor:
         "competencia": re.compile(r"\b\d{2}/\d{4}\b"),
         "codigo_recolhimento": re.compile(r"COD(?:IGO)?\s*DE\s*RECOLHIMENTO\s*[:\-]?\s*(\d{3,4})", re.IGNORECASE),
         "fpas": re.compile(r"\bFPAS\s*[:\-]?\s*(\d{3})\b", re.IGNORECASE),
-        "valor": re.compile(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b"),
+        "valor": re.compile(r"\b(?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}\b"),
         "total_trabalhadores": re.compile(r"TOTAL\s+TRABALHADORES\s*[:\-]?\s*(\d+)", re.IGNORECASE),
         "empresa": re.compile(r"EMPRESA\s*[:\-]?\s*(.+)", re.IGNORECASE),
     }
@@ -51,7 +51,7 @@ class RegexExtractor:
         return match.group(1).strip() if match else None
 
     def _search_value_after_label(self, text: str, label: str) -> Optional[float]:
-        pattern = re.compile(rf"{label}\s*[:\-]?\s*(\d{{1,3}}(?:\.\d{{3}})*,\d{{2}})", re.IGNORECASE)
+        pattern = re.compile(rf"{label}\s*[:\-]?\s*((?:\d{{1,3}}(?:\.\d{{3}})*|\d+),\d{{2}})", re.IGNORECASE)
         match = pattern.search(text)
         if not match:
             return None

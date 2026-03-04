@@ -18,7 +18,7 @@ from .regex_extractor import RegexExtractor
 LOGGER = logging.getLogger(__name__)
 
 PIS_PATTERN = re.compile(r"\b(\d{3}\s*[.\-]?\s*\d{5}\s*[.\-]?\s*\d{2}\s*-\s*\d)\b")
-MONEY_PATTERN = re.compile(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b")
+MONEY_PATTERN = re.compile(r"\b(?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}\b")
 OCR_MONEY_PATTERN = re.compile(r"\d[\d\s.:,]*,\s*\d{2}")
 DATE_PATTERN = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
 CATEGORY_PATTERN = re.compile(r"\b\d{2}\b")

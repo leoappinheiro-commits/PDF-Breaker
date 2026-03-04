@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytesseract
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Users\leonardopinheiro\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+
 class OcrEngine:
     """Executa OCR com pré-processamento robusto para documentos fiscais."""
 
