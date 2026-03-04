@@ -159,19 +159,19 @@ class SefipParser:
         return trabalhadores
 
     def _extract_remuneracoes(self, linhas: List[str], idx: int) -> tuple[Optional[float], Optional[float], Optional[float]]:
-        for jump in (1, 2, 3):
-            target_idx = idx + jump
-            if target_idx >= len(linhas):
-                break
+        """Remunerações devem vir na linha imediatamente após a linha de identificação."""
+        target_idx = idx + 1
+        if target_idx >= len(linhas):
+            return None, None, None
 
-            values = MONEY_PATTERN.findall(linhas[target_idx])
-            if values:
-                rem_sem_13 = self._to_float_or_none(values[0])
-                rem_13 = self._to_float_or_none(values[1]) if len(values) > 1 else None
-                base_13 = self._to_float_or_none(values[2]) if len(values) > 2 else None
-                return rem_sem_13, rem_13, base_13
+        values = MONEY_PATTERN.findall(linhas[target_idx])
+        if not values:
+            return None, None, None
 
-        return None, None, None
+        rem_sem_13 = self._sanitize_expected_range(self._to_float_or_none(values[0]), "Rem_Sem_13", 100, 10000)
+        rem_13 = self._to_float_or_none(values[1]) if len(values) > 1 else None
+        base_13 = self._to_float_or_none(values[2]) if len(values) > 2 else None
+        return rem_sem_13, rem_13, base_13
 
     def _extract_previdenciario_block(self, linhas: List[str]) -> List[Dict]:
         entries: List[Dict] = []
@@ -181,7 +181,7 @@ class SefipParser:
                 continue
 
             admissao = admissao_match.group(0)
-            categoria = self._extract_categoria(linha, admissao)
+            categoria = self._extract_categoria(linha, admissao, linhas, idx)
             contrib = self._extract_contrib_from_window(linhas, idx)
             data_mov = self._extract_second_date(linha, admissao)
 
@@ -209,10 +209,18 @@ class SefipParser:
 
         return entries
 
-    def _extract_categoria(self, line: str, admissao: str) -> Optional[str]:
+    def _extract_categoria(self, line: str, admissao: str, linhas: List[str], idx: int) -> Optional[str]:
         tail = line.split(admissao, maxsplit=1)[-1]
         match = CATEGORY_PATTERN.search(tail)
-        return match.group(0) if match else None
+        if match:
+            return match.group(0)
+
+        next_idx = idx + 2
+        if next_idx < len(linhas):
+            next_match = CATEGORY_PATTERN.search(linhas[next_idx])
+            if next_match:
+                return next_match.group(0)
+        return None
 
     def _extract_second_date(self, line: str, admissao: str) -> Optional[str]:
         dates = DATE_PATTERN.findall(line)
@@ -223,28 +231,47 @@ class SefipParser:
         return None
 
     def _extract_contrib_from_window(self, linhas: List[str], idx: int) -> Optional[float]:
-        for jump in (0, 1, 2):
-            target_idx = idx + jump
-            if target_idx >= len(linhas):
-                break
+        """Contribuição deve vir na linha imediatamente após a admissão."""
+        target_idx = idx + 1
+        if target_idx >= len(linhas):
+            return None
 
-            values = MONEY_PATTERN.findall(linhas[target_idx])
-            if values:
-                return self._to_float_or_none(values[0])
+        values = MONEY_PATTERN.findall(linhas[target_idx])
+        if not values:
+            return None
 
-        return None
+        contrib = self._to_float_or_none(values[0])
+        return self._sanitize_expected_range(contrib, "Contrib_Segurado", 50, 10000)
 
     def _extract_deposito_from_window(self, linhas: List[str], idx: int) -> Optional[float]:
-        for jump in (1, 2):
-            target_idx = idx + jump
-            if target_idx >= len(linhas):
-                break
+        """Depósito FGTS deve vir na linha imediatamente após o CBO."""
+        target_idx = idx + 1
+        if target_idx >= len(linhas):
+            return None
 
-            values = MONEY_PATTERN.findall(linhas[target_idx])
-            if values:
-                return self._to_float_or_none(values[0])
+        values = MONEY_PATTERN.findall(linhas[target_idx])
+        if not values:
+            return None
 
-        return None
+        return self._sanitize_expected_range(self._to_float_or_none(values[0]), "Deposito_FGTS", 1, 10000)
+
+
+    def _sanitize_expected_range(
+        self,
+        value: Optional[float],
+        field_name: str,
+        soft_min: float,
+        hard_max: float,
+    ) -> Optional[float]:
+        """Validação de consistência para reduzir capturas erradas de blocos."""
+        if value is None:
+            return None
+        if value < 1 or value > hard_max:
+            LOGGER.warning("Valor fora da faixa plausível (%s): %s", field_name, value)
+            return None
+        if value < soft_min:
+            LOGGER.warning("Valor possivelmente inconsistente (%s): %s", field_name, value)
+        return value
 
     @staticmethod
     def _normalize_pis(pis_text: str) -> Optional[str]:
