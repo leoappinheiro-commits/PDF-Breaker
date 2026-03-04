@@ -98,14 +98,25 @@ class SefipParser:
         trabalhadores = self._extract_identification_block(linhas, file_name)
 
         previdenciario = self._extract_previdenciario_block(linhas)
+        contribuicoes = self._extract_contribuicoes(linhas)
         fgts = self._extract_fgts_block(linhas)
 
         for idx, worker in enumerate(trabalhadores):
             prev = previdenciario[idx] if idx < len(previdenciario) else {}
             fgts_item = fgts[idx] if idx < len(fgts) else {}
 
+            # Mapeamento posicional obrigatório entre blocos.
+            contrib = contribuicoes[idx] if idx < len(contribuicoes) else None
+            if contrib is not None and worker.get("Rem_Sem_13") == contrib:
+                LOGGER.warning(
+                    "Contrib_Segurado igual a Rem_Sem_13 (possível erro de parsing) para PIS %s no arquivo %s",
+                    worker.get("PIS"),
+                    file_name,
+                )
+                contrib = None
+
             worker["Admissao"] = prev.get("Admissao")
-            worker["Contrib_Segurado"] = prev.get("Contrib_Segurado")
+            worker["Contrib_Segurado"] = contrib
             worker["Categoria"] = prev.get("Categoria")
             worker["Ocor"] = prev.get("Ocor")
             worker["Data_Movimentacao"] = prev.get("Data_Movimentacao")
@@ -182,13 +193,11 @@ class SefipParser:
 
             admissao = admissao_match.group(0)
             categoria = self._extract_categoria(linha, admissao, linhas, idx)
-            contrib = self._extract_contrib_from_window(linhas, idx)
             data_mov = self._extract_second_date(linha, admissao)
 
             entries.append(
                 {
                     "Admissao": admissao,
-                    "Contrib_Segurado": contrib,
                     "Categoria": categoria,
                     "Ocor": None,
                     "Data_Movimentacao": data_mov,
@@ -196,6 +205,16 @@ class SefipParser:
             )
 
         return entries
+
+
+    def _extract_contribuicoes(self, linhas: List[str]) -> List[Optional[float]]:
+        """Extrai lista de contribuicoes por bloco previdenciário para mapeamento posicional."""
+        contribuicoes: List[Optional[float]] = []
+        for idx, linha in enumerate(linhas):
+            if not DATE_PATTERN.search(linha):
+                continue
+            contribuicoes.append(self._extract_contrib_from_window(linhas, idx))
+        return contribuicoes
 
     def _extract_fgts_block(self, linhas: List[str]) -> List[Dict]:
         entries: List[Dict] = []
