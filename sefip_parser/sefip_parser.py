@@ -19,6 +19,9 @@ LOGGER = logging.getLogger(__name__)
 
 PIS_PATTERN = re.compile(r"\b(\d{3}\s*[.\-]?\s*\d{5}\s*[.\-]?\s*\d{2}\s*-\s*\d)\b")
 MONEY_PATTERN = re.compile(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b")
+DATE_PATTERN = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
+CATEGORY_PATTERN = re.compile(r"\b\d{2}\b")
+CBO_PATTERN = re.compile(r"^\s*(\d{5})\s*$")
 HEADER_VARIATIONS = [
     "NOME TRABALHADOR",
     "NOME TRABALHADOR PIS",
@@ -87,12 +90,39 @@ class SefipParser:
         return self.ocr.extract_texts(pixmaps)
 
     def _parse_trabalhadores(self, text: str, file_name: str) -> List[Dict]:
-        """Parser vertical da SEFIP: linha de nome+PIS seguida por linha de remuneração."""
-        rows: List[Dict] = []
+        """Reconstrói trabalhadores combinando blocos identificação, previdenciário e FGTS."""
         if not text.strip():
-            return rows
+            return []
 
         linhas = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        trabalhadores = self._extract_identification_block(linhas, file_name)
+
+        previdenciario = self._extract_previdenciario_block(linhas)
+        fgts = self._extract_fgts_block(linhas)
+
+        for idx, worker in enumerate(trabalhadores):
+            prev = previdenciario[idx] if idx < len(previdenciario) else {}
+            fgts_item = fgts[idx] if idx < len(fgts) else {}
+
+            worker["Admissao"] = prev.get("Admissao")
+            worker["Contrib_Segurado"] = prev.get("Contrib_Segurado")
+            worker["Categoria"] = prev.get("Categoria")
+            worker["Ocor"] = prev.get("Ocor")
+            worker["Data_Movimentacao"] = prev.get("Data_Movimentacao")
+            worker["Deposito_FGTS"] = fgts_item.get("Deposito_FGTS")
+            worker["CBO"] = fgts_item.get("CBO")
+
+        LOGGER.info(
+            "Trabalhadores extraídos de %s: %d (prev=%d, fgts=%d)",
+            file_name,
+            len(trabalhadores),
+            len(previdenciario),
+            len(fgts),
+        )
+        return trabalhadores
+
+    def _extract_identification_block(self, linhas: List[str], file_name: str) -> List[Dict]:
+        trabalhadores: List[Dict] = []
 
         for idx, linha in enumerate(linhas):
             if self._is_worker_header_line(linha):
@@ -107,34 +137,112 @@ class SefipParser:
             if not nome or not pis:
                 continue
 
-            remuneracao = self._extract_remuneracao_from_next_lines(linhas, idx)
-            if remuneracao is None:
-                LOGGER.debug("Remuneração não encontrada para PIS %s no arquivo %s", pis, file_name)
-
-            rows.append(
+            rem_sem_13, rem_13, base_13 = self._extract_remuneracoes(linhas, idx)
+            trabalhadores.append(
                 {
                     "Arquivo": file_name,
-                    "Nome": nome,
+                    "Nome_Trabalhador": nome,
                     "PIS": pis,
-                    "Remuneracao": remuneracao,
+                    "Rem_Sem_13": rem_sem_13,
+                    "Rem_13": rem_13,
+                    "Base_13_Prev": base_13,
+                    "Admissao": None,
+                    "Contrib_Segurado": None,
+                    "Categoria": None,
+                    "Ocor": None,
+                    "Data_Movimentacao": None,
+                    "Deposito_FGTS": None,
+                    "CBO": None,
                 }
             )
 
-        LOGGER.info("Trabalhadores extraídos de %s: %d", file_name, len(rows))
-        return rows
+        return trabalhadores
 
-    def _extract_remuneracao_from_next_lines(self, linhas: List[str], idx: int) -> Optional[float]:
-        # Busca nas 3 linhas seguintes para tolerar quebras de OCR/layout.
+    def _extract_remuneracoes(self, linhas: List[str], idx: int) -> tuple[Optional[float], Optional[float], Optional[float]]:
         for jump in (1, 2, 3):
             target_idx = idx + jump
             if target_idx >= len(linhas):
                 break
 
-            target = linhas[target_idx]
-            values = MONEY_PATTERN.findall(target)
-            if not values:
+            values = MONEY_PATTERN.findall(linhas[target_idx])
+            if values:
+                rem_sem_13 = self._to_float_or_none(values[0])
+                rem_13 = self._to_float_or_none(values[1]) if len(values) > 1 else None
+                base_13 = self._to_float_or_none(values[2]) if len(values) > 2 else None
+                return rem_sem_13, rem_13, base_13
+
+        return None, None, None
+
+    def _extract_previdenciario_block(self, linhas: List[str]) -> List[Dict]:
+        entries: List[Dict] = []
+        for idx, linha in enumerate(linhas):
+            admissao_match = DATE_PATTERN.search(linha)
+            if not admissao_match:
                 continue
-            return self._to_float_or_none(values[0])
+
+            admissao = admissao_match.group(0)
+            categoria = self._extract_categoria(linha, admissao)
+            contrib = self._extract_contrib_from_window(linhas, idx)
+            data_mov = self._extract_second_date(linha, admissao)
+
+            entries.append(
+                {
+                    "Admissao": admissao,
+                    "Contrib_Segurado": contrib,
+                    "Categoria": categoria,
+                    "Ocor": None,
+                    "Data_Movimentacao": data_mov,
+                }
+            )
+
+        return entries
+
+    def _extract_fgts_block(self, linhas: List[str]) -> List[Dict]:
+        entries: List[Dict] = []
+        for idx, linha in enumerate(linhas):
+            cbo_match = CBO_PATTERN.match(linha)
+            if not cbo_match:
+                continue
+
+            deposito = self._extract_deposito_from_window(linhas, idx)
+            entries.append({"CBO": cbo_match.group(1), "Deposito_FGTS": deposito})
+
+        return entries
+
+    def _extract_categoria(self, line: str, admissao: str) -> Optional[str]:
+        tail = line.split(admissao, maxsplit=1)[-1]
+        match = CATEGORY_PATTERN.search(tail)
+        return match.group(0) if match else None
+
+    def _extract_second_date(self, line: str, admissao: str) -> Optional[str]:
+        dates = DATE_PATTERN.findall(line)
+        if len(dates) > 1:
+            for dt in dates:
+                if dt != admissao:
+                    return dt
+        return None
+
+    def _extract_contrib_from_window(self, linhas: List[str], idx: int) -> Optional[float]:
+        for jump in (0, 1, 2):
+            target_idx = idx + jump
+            if target_idx >= len(linhas):
+                break
+
+            values = MONEY_PATTERN.findall(linhas[target_idx])
+            if values:
+                return self._to_float_or_none(values[0])
+
+        return None
+
+    def _extract_deposito_from_window(self, linhas: List[str], idx: int) -> Optional[float]:
+        for jump in (1, 2):
+            target_idx = idx + jump
+            if target_idx >= len(linhas):
+                break
+
+            values = MONEY_PATTERN.findall(linhas[target_idx])
+            if values:
+                return self._to_float_or_none(values[0])
 
         return None
 
