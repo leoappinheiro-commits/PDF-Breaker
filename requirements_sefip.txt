@@ -1,0 +1,9 @@
+pdfplumber
+PyMuPDF
+pytesseract
+opencv-python
+pandas
+numpy
+openpyxl
+tqdm
+rapidfuzz
