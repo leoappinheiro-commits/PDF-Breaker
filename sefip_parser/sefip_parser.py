@@ -19,6 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 PIS_PATTERN = re.compile(r"\b(\d{3}\s*[.\-]?\s*\d{5}\s*[.\-]?\s*\d{2}\s*-\s*\d)\b")
 MONEY_PATTERN = re.compile(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b")
+OCR_MONEY_PATTERN = re.compile(r"\d[\d\s.:,OB]*,\s*\d{2}")
 DATE_PATTERN = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
 CATEGORY_PATTERN = re.compile(r"\b\d{2}\b")
 CBO_PATTERN = re.compile(r"^\s*(\d{5})\s*$")
@@ -179,7 +180,7 @@ class SefipParser:
         if not values:
             return None, None, None
 
-        rem_sem_13 = self._sanitize_expected_range(self._to_float_or_none(values[0]), "Rem_Sem_13", 100, 50000)
+        rem_sem_13 = self._sanitize_expected_range(self._to_float_or_none(values[0]), "Rem_Sem_13", 100, 10000)
         rem_13 = self._to_float_or_none(values[1]) if len(values) > 1 else None
         base_13 = self._to_float_or_none(values[2]) if len(values) > 2 else None
         return rem_sem_13, rem_13, base_13
@@ -229,11 +230,32 @@ class SefipParser:
         return entries
 
 
+    def _normalize_ocr_value_token(self, token: str) -> str:
+        """Reconstrói valor monetário quebrado pelo OCR antes do parse regex."""
+        normalized = token.upper().replace(" ", "")
+        normalized = normalized.replace("B", "8").replace("O", "0")
+        normalized = normalized.replace(":.", "1")
+        normalized = normalized.replace(";", ",")
+        normalized = re.sub(r"[^\d,\.]", "", normalized)
+
+        if "," in normalized:
+            inteiro, dec = normalized.rsplit(",", 1)
+            inteiro = inteiro.replace(".", "")
+            normalized = f"{inteiro},{dec[:2]}"
+
+        return normalized
+
     def _extract_money_values(self, line: str) -> List[str]:
-        """Normaliza ruídos de OCR e extrai valores monetários no padrão BRL."""
-        normalized = re.sub(r"(\d)\s*,\s*(\d{2})", r"\1,\2", line)
-        normalized = re.sub(r"(\d)\s*\.\s*(\d{3})", r"\1.\2", normalized)
-        return MONEY_PATTERN.findall(normalized)
+        """Extrai valores monetários tolerando tokens quebrados e ruídos comuns de OCR."""
+        candidates = OCR_MONEY_PATTERN.findall(line)
+        values: List[str] = []
+
+        for candidate in candidates:
+            token = self._normalize_ocr_value_token(candidate)
+            if MONEY_PATTERN.fullmatch(token):
+                values.append(token)
+
+        return values
 
     def _extract_categoria(self, line: str, admissao: str, linhas: List[str], idx: int) -> Optional[str]:
         tail = line.split(admissao, maxsplit=1)[-1]
@@ -267,7 +289,7 @@ class SefipParser:
             return None
 
         contrib = self._to_float_or_none(values[0])
-        return self._sanitize_expected_range(contrib, "Contrib_Segurado", 10, 5000)
+        return self._sanitize_expected_range(contrib, "Contrib_Segurado", 50, 1000)
 
     def _extract_deposito_from_window(self, linhas: List[str], idx: int) -> Optional[float]:
         """Depósito FGTS deve vir na linha imediatamente após o CBO."""
