@@ -140,6 +140,31 @@ def parse_args() -> DownloadConfig:
     )
 
 
+def _resolve_chromedriver_binary(installed_path: str) -> Path:
+    """
+    Garante que o caminho retornado pelo webdriver_manager aponte para o executável.
+
+    Em algumas versões, o manager pode retornar um caminho não executável
+    (ex.: THIRD_PARTY_NOTICES), causando WinError 193 no Windows.
+    """
+    path = Path(installed_path)
+    if path.is_file() and path.suffix.lower() == ".exe":
+        return path
+
+    candidates = []
+    if path.is_file():
+        candidates = list(path.parent.rglob("chromedriver*.exe"))
+    elif path.is_dir():
+        candidates = list(path.rglob("chromedriver*.exe"))
+
+    if not candidates:
+        raise FileNotFoundError(
+            f"Não foi possível localizar chromedriver.exe a partir de: {installed_path}"
+        )
+
+    return max(candidates, key=lambda candidate: candidate.stat().st_mtime)
+
+
 def initialize_selenium_driver() -> webdriver.Chrome:
     logger = logging.getLogger("selenium_init")
     try:
@@ -148,11 +173,15 @@ def initialize_selenium_driver() -> webdriver.Chrome:
         chrome_options.add_argument("--safebrowsing-disable-download-protection")
         chrome_options.add_argument("--no-sandbox")
 
-        service = Service(ChromeDriverManager().install())
+        raw_driver_path = ChromeDriverManager().install()
+        driver_binary = _resolve_chromedriver_binary(raw_driver_path)
+        logger.info("driver_binary_resolved=true path=%s", driver_binary)
+
+        service = Service(str(driver_binary))
         driver = webdriver.Chrome(service=service, options=chrome_options)
         logger.info("driver_initialized=true")
         return driver
-    except WebDriverException as exc:
+    except (WebDriverException, OSError, FileNotFoundError) as exc:
         logger.exception("driver_initialized=false error=%s", exc)
         raise
 
