@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -10,10 +11,19 @@ import pandas as pd
 from rapidfuzz import fuzz
 from tqdm import tqdm
 
-from .ocr_engine import OcrEngine
-from .page_detector import PageDetector
-from .pdf_reader import PdfReader
-from .regex_extractor import RegexExtractor
+if __package__ in (None, ""):
+    project_root = Path(__file__).resolve().parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    from sefip_parser.ocr_engine import OcrEngine
+    from sefip_parser.page_detector import PageDetector
+    from sefip_parser.pdf_reader import PdfReader
+    from sefip_parser.regex_extractor import RegexExtractor
+else:
+    from .ocr_engine import OcrEngine
+    from .page_detector import PageDetector
+    from .pdf_reader import PdfReader
+    from .regex_extractor import RegexExtractor
 
 LOGGER = logging.getLogger(__name__)
 
