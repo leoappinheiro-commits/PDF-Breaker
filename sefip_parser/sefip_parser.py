@@ -29,6 +29,12 @@ HEADER_VARIATIONS = [
     "NOME TRABALHADOR PIS/PASEP",
     "NOME TRABALHADOR PIS/PASEP/CI",
 ]
+MODEL_DOC_HINT = "fgts 51775690000100 e filiais 012007text"
+MODEL_EXPECTED_CONTRIBS = [
+    116.72, 195.94, 124.92, 104.61, 198.77,
+    98.29, 61.24, 75.68, 262.65, 99.28,
+    163.92, 240.92, 308.20, 168.33, 79.62,
+]
 
 
 @dataclass
@@ -53,6 +59,8 @@ class SefipParser:
         resumo_rows: List[Dict] = []
         trabalhadores_rows: List[Dict] = []
 
+        model_reference = self._load_model_reference_contribs(pdf_files)
+
         for pdf_file in tqdm(pdf_files, desc="Processando PDFs"):
             LOGGER.info("Arquivo sendo processado: %s", pdf_file.name)
             page_texts = self._extract_text_by_strategy(pdf_file)
@@ -72,7 +80,10 @@ class SefipParser:
 
             trab_pages = [p.text for p in classified_pages if p.section == "trabalhadores"]
             trab_pages_text = "\n".join(trab_pages).strip() or full_text
-            trabalhadores_rows.extend(self._parse_trabalhadores(trab_pages_text, pdf_file.name))
+            rows = self._parse_trabalhadores(trab_pages_text, pdf_file.name)
+            if model_reference and MODEL_DOC_HINT in pdf_file.stem.lower():
+                self._validate_model_mapping(rows, model_reference)
+            trabalhadores_rows.extend(rows)
 
         return ParseResult(
             empresa_df=pd.DataFrame(empresa_rows),
@@ -171,12 +182,12 @@ class SefipParser:
         return trabalhadores
 
     def _extract_remuneracoes(self, linhas: List[str], idx: int) -> tuple[Optional[float], Optional[float], Optional[float]]:
-        """Busca remuneração em janela de até 3 linhas após o PIS para tolerar OCR quebrado."""
-        window = linhas[idx + 1 : idx + 4]
-        values: List[str] = []
-        for line in window:
-            values.extend(self._extract_money_values(line))
+        """Mantém lógica original: remuneração na linha imediatamente após o PIS."""
+        target_idx = idx + 1
+        if target_idx >= len(linhas):
+            return None, None, None
 
+        values = self._extract_money_values(linhas[target_idx])
         if not values:
             return None, None, None
 
@@ -184,6 +195,43 @@ class SefipParser:
         rem_13 = self._to_float_or_none(values[1]) if len(values) > 1 else None
         base_13 = self._to_float_or_none(values[2]) if len(values) > 2 else None
         return rem_sem_13, rem_13, base_13
+
+    def _load_model_reference_contribs(self, pdf_files: List[Path]) -> Optional[List[float]]:
+        """Lê a 1ª página do documento modelo para validar associação posicional."""
+        model_pdf = next((p for p in pdf_files if MODEL_DOC_HINT in p.stem.lower()), None)
+        if not model_pdf:
+            return None
+
+        try:
+            load_result = self.reader.load(model_pdf)
+            first_page_text = load_result.page_texts[0].text if load_result.page_texts else ""
+            if not first_page_text:
+                pixmaps = self.reader.render_pages_as_images(model_pdf)
+                first_page_text = self.ocr.extract_texts(pixmaps[:1])[0] if pixmaps else ""
+
+            contribs = [c for c in self._extract_contribuicoes(first_page_text.splitlines()) if c is not None]
+            LOGGER.info("Documento modelo detectado. Contribuições na 1ª página: %d", len(contribs))
+
+            if contribs and len(contribs) != len(MODEL_EXPECTED_CONTRIBS):
+                LOGGER.warning(
+                    "Modelo com quantidade inesperada de contribuições: %d (esperado=%d)",
+                    len(contribs),
+                    len(MODEL_EXPECTED_CONTRIBS),
+                )
+            return contribs or None
+        except Exception as exc:
+            LOGGER.warning("Falha ao validar documento modelo (%s): %s", model_pdf.name, exc)
+            return None
+
+    def _validate_model_mapping(self, workers: List[Dict], contribs: List[float]) -> None:
+        if len(workers) != len(contribs):
+            LOGGER.warning(
+                "Desalinhamento estrutural no modelo: trabalhadores=%d, contribuições=%d",
+                len(workers),
+                len(contribs),
+            )
+            return
+        LOGGER.info("Modelo validado com mapeamento 1:1 de trabalhadores e contribuições.")
 
     def _extract_previdenciario_block(self, linhas: List[str]) -> List[Dict]:
         entries: List[Dict] = []
