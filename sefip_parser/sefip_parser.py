@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 PIS_PATTERN = re.compile(r"\b(\d{3}\s*[.\-]?\s*\d{5}\s*[.\-]?\s*\d{2}\s*-\s*\d)\b")
 MONEY_PATTERN = re.compile(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b")
-OCR_MONEY_PATTERN = re.compile(r"\d[\d\s.:,OB]*,\s*\d{2}")
+OCR_MONEY_PATTERN = re.compile(r"\d[\d\s.:,]*,\s*\d{2}")
 DATE_PATTERN = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
 CATEGORY_PATTERN = re.compile(r"\b\d{2}\b")
 CBO_PATTERN = re.compile(r"^\s*(\d{5})\s*$")
@@ -278,12 +278,27 @@ class SefipParser:
         return entries
 
 
-    def _normalize_ocr_value_token(self, token: str) -> str:
-        """Reconstrói valor monetário quebrado pelo OCR antes do parse regex."""
-        normalized = token.upper().replace(" ", "")
-        normalized = normalized.replace("B", "8").replace("O", "0")
+    def _normalize_numbers_text(self, text: str) -> str:
+        """Normaliza fragmentação OCR de números monetários antes da extração."""
+        normalized = text.upper()
+        normalized = normalized.replace(" . ", ".")
+        normalized = normalized.replace(" ,", ",")
+        normalized = normalized.replace(", ", ",")
+        normalized = normalized.replace(" .", ".")
+        normalized = normalized.replace(". ", ".")
+        normalized = normalized.replace("B", "8")
+        normalized = normalized.replace("O", "0")
         normalized = normalized.replace(":.", "1")
         normalized = normalized.replace(";", ",")
+        normalized = re.sub(r"\s+,\s*", ",", normalized)
+        normalized = re.sub(r"\s+\.\s*", ".", normalized)
+        normalized = re.sub(r"(\d)\s*,\s*(\d{2})", r"\1,\2", normalized)
+        normalized = re.sub(r"(\d)\s*\.\s*(\d{3})", r"\1.\2", normalized)
+        return normalized
+
+    def _normalize_ocr_value_token(self, token: str) -> str:
+        """Reconstrói token monetário para formato BRL válido."""
+        normalized = self._normalize_numbers_text(token).replace(" ", "")
         normalized = re.sub(r"[^\d,\.]", "", normalized)
 
         if "," in normalized:
@@ -294,8 +309,9 @@ class SefipParser:
         return normalized
 
     def _extract_money_values(self, line: str) -> List[str]:
-        """Extrai valores monetários tolerando tokens quebrados e ruídos comuns de OCR."""
-        candidates = OCR_MONEY_PATTERN.findall(line)
+        """Extrai valores monetários após normalização OCR da linha inteira."""
+        normalized_line = self._normalize_numbers_text(line)
+        candidates = OCR_MONEY_PATTERN.findall(normalized_line)
         values: List[str] = []
 
         for candidate in candidates:
