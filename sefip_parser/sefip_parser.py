@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -10,10 +11,19 @@ import pandas as pd
 from rapidfuzz import fuzz
 from tqdm import tqdm
 
-from .ocr_engine import OcrEngine
-from .page_detector import PageDetector
-from .pdf_reader import PdfReader
-from .regex_extractor import RegexExtractor
+if __package__ in (None, ""):
+    current_dir = Path(__file__).resolve().parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+    from ocr_engine import OcrEngine
+    from page_detector import PageDetector
+    from pdf_reader import PdfReader
+    from regex_extractor import RegexExtractor
+else:
+    from .ocr_engine import OcrEngine
+    from .page_detector import PageDetector
+    from .pdf_reader import PdfReader
+    from .regex_extractor import RegexExtractor
 
 LOGGER = logging.getLogger(__name__)
 
